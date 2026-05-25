@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"mybox-cpo/backend/internal/metrics"
+
 	"go.uber.org/zap"
 )
 
@@ -56,6 +58,7 @@ func (h *Hub) Broadcast(eventType string, payload any) {
 		select {
 		case ch <- event:
 		default:
+			metrics.SSEDroppedEventsTotal.WithLabelValues(eventType).Inc()
 			h.logger.Warn("dropping realtime event for slow client", zap.String("type", eventType))
 		}
 	}

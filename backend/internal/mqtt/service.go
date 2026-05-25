@@ -11,6 +11,8 @@ import (
 
 	"mybox-cpo/backend/internal/config"
 	"mybox-cpo/backend/internal/db"
+	"mybox-cpo/backend/internal/metrics"
+	"mybox-cpo/backend/internal/pricing"
 	"mybox-cpo/backend/internal/realtime"
 
 	paho "github.com/eclipse/paho.mqtt.golang"
@@ -23,6 +25,7 @@ type Service struct {
 	cfg    config.Config
 	store  *db.Store
 	hub    *realtime.Hub
+	pricer pricing.Service
 	logger *zap.Logger
 	client paho.Client
 }
@@ -38,12 +41,22 @@ type stationMessage struct {
 }
 
 type commandMessage struct {
+	CommandID     string    `json:"command_id"`
 	TransactionID string    `json:"transaction_id,omitempty"`
 	Timestamp     time.Time `json:"timestamp"`
 }
 
+type commandAck struct {
+	CommandID     string    `json:"command_id"`
+	StationID     string    `json:"station_id"`
+	TransactionID string    `json:"transaction_id,omitempty"`
+	Status        string    `json:"status"`
+	Reason        string    `json:"reason,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
 func NewService(cfg config.Config, store *db.Store, hub *realtime.Hub, logger *zap.Logger) *Service {
-	return &Service{cfg: cfg, store: store, hub: hub, logger: logger}
+	return &Service{cfg: cfg, store: store, hub: hub, pricer: pricing.NewService(cfg), logger: logger}
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -58,9 +71,10 @@ func (s *Service) Start(ctx context.Context) error {
 	opts.OnConnect = func(client paho.Client) {
 		s.logger.Info("mqtt connected", zap.String("broker", s.cfg.MQTTBroker))
 		subscriptions := map[string]byte{
-			topicPrefix + "/+/heartbeat": 1,
-			topicPrefix + "/+/status":    1,
-			topicPrefix + "/+/meter":     0,
+			topicPrefix + "/+/heartbeat":    1,
+			topicPrefix + "/+/status":       1,
+			topicPrefix + "/+/meter":        0,
+			topicPrefix + "/+/command_acks": 1,
 		}
 		token := client.SubscribeMultiple(subscriptions, s.handleMessage)
 		if token.Wait() && token.Error() != nil {
@@ -68,6 +82,7 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 	}
 	opts.OnConnectionLost = func(_ paho.Client, err error) {
+		metrics.MQTTReconnectsTotal.Inc()
 		s.logger.Warn("mqtt connection lost", zap.Error(err))
 	}
 
@@ -88,21 +103,50 @@ func (s *Service) Stop() {
 	}
 }
 
-func (s *Service) StartCharging(ctx context.Context, stationID string) (string, error) {
+func (s *Service) StartCharging(ctx context.Context, stationID string) (string, db.StationCommand, error) {
 	transactionID, err := newTransactionID()
 	if err != nil {
-		return "", err
+		return "", db.StationCommand{}, err
 	}
-	msg := commandMessage{TransactionID: transactionID, Timestamp: time.Now().UTC()}
+	command, err := s.store.CreateCommand(ctx, stationID, "start_charging", &transactionID)
+	if err != nil {
+		return "", db.StationCommand{}, err
+	}
+	msg := commandMessage{CommandID: command.ID, TransactionID: transactionID, Timestamp: time.Now().UTC()}
 	if err := s.publishCommand(ctx, stationID, "start_charging", msg); err != nil {
-		return "", err
+		failed, markErr := s.store.MarkCommandFailed(ctx, command.ID, err)
+		if markErr != nil {
+			s.logger.Error("mark command failed failed", zap.Error(markErr))
+		}
+		return "", failed, err
 	}
-	return transactionID, nil
+	sent, err := s.store.MarkCommandSent(ctx, command.ID)
+	if err != nil {
+		return "", command, err
+	}
+	s.hub.Broadcast("command_update", sent)
+	return transactionID, sent, nil
 }
 
-func (s *Service) StopCharging(ctx context.Context, stationID string) error {
-	msg := commandMessage{Timestamp: time.Now().UTC()}
-	return s.publishCommand(ctx, stationID, "stop_charging", msg)
+func (s *Service) StopCharging(ctx context.Context, stationID string) (db.StationCommand, error) {
+	command, err := s.store.CreateCommand(ctx, stationID, "stop_charging", nil)
+	if err != nil {
+		return db.StationCommand{}, err
+	}
+	msg := commandMessage{CommandID: command.ID, Timestamp: time.Now().UTC()}
+	if err := s.publishCommand(ctx, stationID, "stop_charging", msg); err != nil {
+		failed, markErr := s.store.MarkCommandFailed(ctx, command.ID, err)
+		if markErr != nil {
+			s.logger.Error("mark command failed failed", zap.Error(markErr))
+		}
+		return failed, err
+	}
+	sent, err := s.store.MarkCommandSent(ctx, command.ID)
+	if err != nil {
+		return command, err
+	}
+	s.hub.Broadcast("command_update", sent)
+	return sent, nil
 }
 
 func (s *Service) publishCommand(ctx context.Context, stationID, command string, payload commandMessage) error {
@@ -149,6 +193,7 @@ func (s *Service) handleMessage(_ paho.Client, message paho.Message) {
 	if payload.Timestamp.IsZero() {
 		payload.Timestamp = time.Now().UTC()
 	}
+	metrics.MQTTMessagesTotal.WithLabelValues(kind).Inc()
 
 	switch kind {
 	case "heartbeat":
@@ -158,6 +203,8 @@ func (s *Service) handleMessage(_ paho.Client, message paho.Message) {
 		s.handleStatus(ctx, stationID, payload)
 	case "meter":
 		s.handleMeter(ctx, stationID, payload)
+	case "command_acks":
+		s.handleCommandAck(ctx, stationID, message.Payload())
 	}
 }
 
@@ -169,13 +216,47 @@ func (s *Service) handleStatus(ctx context.Context, stationID string, payload st
 		}
 	}
 	if payload.Status == "Available" || payload.Status == "Faulted" {
-		if err := s.store.StopSession(ctx, stationID, txID, payload.MeterWh, payload.Timestamp, s.cfg.PricePerKWh); err != nil {
+		quote := s.pricer.Quote(s.maxPowerKW(ctx, stationID, payload.MaxPowerKW), payload.Timestamp)
+		if err := s.store.StopSession(ctx, stationID, txID, payload.MeterWh, payload.Timestamp, quote); err != nil {
 			s.logger.Error("session stop failed", zap.String("station_id", stationID), zap.Error(err))
 		}
 	}
 
 	station, err := s.store.UpsertStatus(ctx, stationID, payload.MaxPowerKW, defaultStatus(payload.Status), txID, payload.MeterWh, payload.Timestamp)
 	s.broadcastOrLog("station_update", station, err)
+}
+
+func (s *Service) handleCommandAck(ctx context.Context, stationID string, body []byte) {
+	var ack commandAck
+	if err := json.Unmarshal(body, &ack); err != nil {
+		s.logger.Warn("command ack payload invalid", zap.String("station_id", stationID), zap.Error(err))
+		return
+	}
+	if ack.CommandID == "" {
+		s.logger.Warn("command ack missing command id", zap.String("station_id", stationID))
+		return
+	}
+	status := "acked"
+	if ack.Status != "accepted" {
+		status = "failed"
+	}
+	command, err := s.store.AckCommand(ctx, ack.CommandID, status, ack.Reason)
+	if err != nil {
+		s.logger.Error("command ack update failed", zap.String("station_id", stationID), zap.Error(err))
+		return
+	}
+	s.hub.Broadcast("command_update", command)
+}
+
+func (s *Service) maxPowerKW(ctx context.Context, stationID string, fromPayload float64) float64 {
+	if fromPayload > 0 {
+		return fromPayload
+	}
+	station, err := s.store.GetStation(ctx, stationID)
+	if err != nil {
+		return 0
+	}
+	return station.MaxPowerKW
 }
 
 func (s *Service) handleMeter(ctx context.Context, stationID string, payload stationMessage) {

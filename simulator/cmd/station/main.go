@@ -47,7 +47,17 @@ type telemetry struct {
 }
 
 type command struct {
+	CommandID     string    `json:"command_id"`
 	TransactionID string    `json:"transaction_id,omitempty"`
+	Timestamp     time.Time `json:"timestamp"`
+}
+
+type commandAck struct {
+	CommandID     string    `json:"command_id"`
+	StationID     string    `json:"station_id"`
+	TransactionID string    `json:"transaction_id,omitempty"`
+	Status        string    `json:"status"`
+	Reason        string    `json:"reason,omitempty"`
 	Timestamp     time.Time `json:"timestamp"`
 }
 
@@ -132,31 +142,35 @@ func (s *Station) handleCommand(_ paho.Client, message paho.Message) {
 	}
 	switch {
 	case strings.HasSuffix(message.Topic(), "/start_charging"):
-		s.start(payload.TransactionID)
+		s.start(payload)
 	case strings.HasSuffix(message.Topic(), "/stop_charging"):
-		s.stop()
+		s.stop(payload)
 	}
 }
 
-func (s *Station) start(transactionID string) {
-	if transactionID == "" {
+func (s *Station) start(payload command) {
+	if payload.TransactionID == "" {
+		s.publishAck(payload, "rejected", "missing transaction_id")
 		return
 	}
 	s.mu.Lock()
 	if s.status != "Available" {
+		reason := "station is " + s.status
 		s.mu.Unlock()
+		s.publishAck(payload, "rejected", reason)
 		return
 	}
 	s.status = "Preparing"
-	s.transactionID = transactionID
+	s.transactionID = payload.TransactionID
 	s.lastMeterAt = time.Now().UTC()
 	s.mu.Unlock()
+	s.publishAck(payload, "accepted", "")
 	s.publishStatus()
 
 	go func() {
 		time.Sleep(2 * time.Second)
 		s.mu.Lock()
-		if s.status == "Preparing" && s.transactionID == transactionID {
+		if s.status == "Preparing" && s.transactionID == payload.TransactionID {
 			s.status = "Charging"
 			s.lastMeterAt = time.Now().UTC()
 		}
@@ -165,14 +179,17 @@ func (s *Station) start(transactionID string) {
 	}()
 }
 
-func (s *Station) stop() {
+func (s *Station) stop(payload command) {
 	s.mu.Lock()
 	if s.status != "Preparing" && s.status != "Charging" {
+		reason := "station is " + s.status
 		s.mu.Unlock()
+		s.publishAck(payload, "rejected", reason)
 		return
 	}
 	s.status = "Finishing"
 	s.mu.Unlock()
+	s.publishAck(payload, "accepted", "")
 	s.publishStatus()
 
 	go func() {
@@ -184,6 +201,27 @@ func (s *Station) stop() {
 		s.mu.Unlock()
 		s.publishStatus()
 	}()
+}
+
+func (s *Station) publishAck(payload command, status, reason string) {
+	body, err := json.Marshal(commandAck{
+		CommandID:     payload.CommandID,
+		StationID:     s.cfg.StationID,
+		TransactionID: payload.TransactionID,
+		Status:        status,
+		Reason:        reason,
+		Timestamp:     time.Now().UTC(),
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ack marshal failed: %v\n", err)
+		return
+	}
+	topic := fmt.Sprintf("%s/%s/command_acks", topicPrefix, s.cfg.StationID)
+	token := s.client.Publish(topic, 1, false, body)
+	token.WaitTimeout(3 * time.Second)
+	if token.Error() != nil {
+		fmt.Fprintf(os.Stderr, "ack publish failed: %v\n", token.Error())
+	}
 }
 
 func (s *Station) tickCharging() {

@@ -11,6 +11,7 @@ docker compose up --build
 Services:
 
 - Backend REST/SSE API: http://localhost:8080
+- Prometheus metrics: http://localhost:8080/metrics
 - Placeholder frontend port: http://localhost:5173
 - MQTT broker: localhost:1883
 - Postgres: localhost:5432
@@ -27,6 +28,7 @@ curl -X POST http://localhost:8080/api/stations/station-1/start
 curl http://localhost:8080/api/stations/station-1/meter-values?minutes=10
 curl -X POST http://localhost:8080/api/stations/station-1/stop
 curl http://localhost:8080/api/stations/station-1/sessions
+curl http://localhost:8080/metrics
 ```
 
 Live updates are available through Server-Sent Events:
@@ -42,6 +44,7 @@ Station telemetry topics:
 - `cpo/v1/stations/{stationId}/heartbeat` with QoS 1
 - `cpo/v1/stations/{stationId}/status` with QoS 1 and retained status
 - `cpo/v1/stations/{stationId}/meter` with QoS 0
+- `cpo/v1/stations/{stationId}/command_acks` with QoS 1
 
 Command topics:
 
@@ -58,7 +61,24 @@ Session lifecycle:
 
 - `Preparing` or `Charging` status with `transaction_id` creates the session.
 - `meter` messages append time-series power and cumulative Wh points.
-- `Available` or `Faulted` status closes the latest active session and computes `total_kwh` and `total_cost`.
+- `Available` or `Faulted` status closes the latest active session and computes `total_kwh`, `total_cost`, `price_per_kwh`, `pricing_tariff`, and station power class.
+
+Command handling:
+
+- REST start/stop creates a durable command row with `queued` status.
+- Successful MQTT publish moves it to `sent`.
+- Simulator command acknowledgement moves it to `acked` or `failed`.
+- SSE emits `command_update` events for frontend toasts/status.
+
+Pricing:
+
+- Peak/off-peak prices are controlled by `PEAK_PRICE_PER_KWH`, `OFFPEAK_PRICE_PER_KWH`, `PEAK_START_HOUR`, and `PEAK_END_HOUR`.
+- DC multiplier is controlled by `DC_POWER_THRESHOLD_KW` and `DC_PRICE_MULTIPLIER`.
+- Defaults keep `PRICE_PER_KWH` compatibility while showing tariff metadata in session history.
+
+Observability:
+
+- `/metrics` exposes Prometheus counters/histograms for HTTP requests, MQTT messages/reconnects, dropped SSE events, and DB write latency.
 
 ## Frontend Wiring
 
@@ -84,4 +104,18 @@ go vet ./...
 cd ../simulator
 go test ./...
 go vet ./...
+```
+
+Compile integration tests without running containers:
+
+```bash
+cd backend
+go test -run '^$' -tags=integration ./internal/db
+```
+
+Run Postgres-backed integration test when Docker is healthy:
+
+```bash
+cd backend
+go test -tags=integration ./internal/db
 ```

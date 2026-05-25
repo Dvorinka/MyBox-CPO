@@ -13,6 +13,12 @@ type Config struct {
 	MQTTBroker         string
 	MQTTClientID       string
 	PricePerKWh        float64
+	PeakPricePerKWh    float64
+	OffPeakPricePerKWh float64
+	DCPowerThresholdKW float64
+	DCPriceMultiplier  float64
+	PeakStartHour      int
+	PeakEndHour        int
 	OfflineAfter       time.Duration
 	CORSAllowedOrigins []string
 }
@@ -24,6 +30,12 @@ func Load() Config {
 		MQTTBroker:         env("MQTT_BROKER", "tcp://localhost:1883"),
 		MQTTClientID:       env("MQTT_CLIENT_ID", "cpo-backend"),
 		PricePerKWh:        envFloat("PRICE_PER_KWH", 8.5),
+		PeakPricePerKWh:    envFloat("PEAK_PRICE_PER_KWH", envFloat("PRICE_PER_KWH", 8.5)),
+		OffPeakPricePerKWh: envFloat("OFFPEAK_PRICE_PER_KWH", envFloat("PRICE_PER_KWH", 8.5)*0.85),
+		DCPowerThresholdKW: envFloat("DC_POWER_THRESHOLD_KW", 50),
+		DCPriceMultiplier:  envFloat("DC_PRICE_MULTIPLIER", 1.15),
+		PeakStartHour:      envInt("PEAK_START_HOUR", 7),
+		PeakEndHour:        envInt("PEAK_END_HOUR", 21),
 		OfflineAfter:       time.Duration(envInt("OFFLINE_AFTER_SECONDS", 90)) * time.Second,
 		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS", "*"),
 	}

@@ -8,6 +8,9 @@ import (
 	"sort"
 	"time"
 
+	"mybox-cpo/backend/internal/metrics"
+	"mybox-cpo/backend/internal/pricing"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -37,6 +40,9 @@ type ChargingSession struct {
 	EndMeterWh    *int64     `json:"end_meter_wh,omitempty"`
 	TotalKWh      *float64   `json:"total_kwh,omitempty"`
 	TotalCost     *float64   `json:"total_cost,omitempty"`
+	PricePerKWh   *float64   `json:"price_per_kwh,omitempty"`
+	PricingTariff *string    `json:"pricing_tariff,omitempty"`
+	PowerClass    *string    `json:"station_power_class,omitempty"`
 }
 
 type MeterValue struct {
@@ -45,6 +51,19 @@ type MeterValue struct {
 	MeasuredAt    time.Time `json:"measured_at"`
 	PowerKW       float64   `json:"power_kw"`
 	MeterWh       int64     `json:"meter_wh"`
+}
+
+type StationCommand struct {
+	ID            string     `json:"id"`
+	StationID     string     `json:"station_id"`
+	Command       string     `json:"command"`
+	TransactionID *string    `json:"transaction_id,omitempty"`
+	Status        string     `json:"status"`
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	QueuedAt      time.Time  `json:"queued_at"`
+	SentAt        *time.Time `json:"sent_at,omitempty"`
+	AckedAt       *time.Time `json:"acked_at,omitempty"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 func NewStore(pool *pgxpool.Pool) *Store {
@@ -62,7 +81,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		return fmt.Errorf("ensure schema_migrations: %w", err)
 	}
 
-	files, err := filepath.Glob("migrations/*.sql")
+	files, err := migrationFiles()
 	if err != nil {
 		return fmt.Errorf("list migrations: %w", err)
 	}
@@ -89,6 +108,24 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func migrationFiles() ([]string, error) {
+	candidates := []string{
+		"migrations/*.sql",
+		"../../migrations/*.sql",
+	}
+	for _, pattern := range candidates {
+		files, err := filepath.Glob(pattern)
+		if err != nil {
+			return nil, err
+		}
+		if len(files) > 0 {
+			sort.Strings(files)
+			return files, nil
+		}
+	}
+	return nil, fmt.Errorf("no migration files found")
 }
 
 func (s *Store) UpsertHeartbeat(ctx context.Context, stationID string, maxPowerKW float64, status string, meterWh int64, seenAt time.Time) (Station, error) {
@@ -127,6 +164,7 @@ func (s *Store) UpsertStatus(ctx context.Context, stationID string, maxPowerKW f
 }
 
 func (s *Store) StartSession(ctx context.Context, stationID, transactionID string, meterWh int64, startedAt time.Time) error {
+	defer metrics.ObserveDBWrite("start_session", time.Now())
 	_, err := s.pool.Exec(ctx, `
 		INSERT INTO charging_sessions (transaction_id, station_id, start_time, start_meter_wh)
 		VALUES ($1, $2, $3, $4)
@@ -135,7 +173,8 @@ func (s *Store) StartSession(ctx context.Context, stationID, transactionID strin
 	return err
 }
 
-func (s *Store) StopSession(ctx context.Context, stationID string, transactionID *string, meterWh int64, stoppedAt time.Time, pricePerKWh float64) error {
+func (s *Store) StopSession(ctx context.Context, stationID string, transactionID *string, meterWh int64, stoppedAt time.Time, quote pricing.Quote) error {
+	defer metrics.ObserveDBWrite("stop_session", time.Now())
 	if transactionID != nil && *transactionID != "" {
 		_, err := s.pool.Exec(ctx, `
 			UPDATE charging_sessions
@@ -143,9 +182,12 @@ func (s *Store) StopSession(ctx context.Context, stationID string, transactionID
 				end_meter_wh = $3,
 				total_kwh = GREATEST(($3 - start_meter_wh)::double precision / 1000.0, 0),
 				total_cost = GREATEST(($3 - start_meter_wh)::double precision / 1000.0, 0) * $5,
+				price_per_kwh = $5,
+				pricing_tariff = $6,
+				station_power_class = $7,
 				updated_at = now()
 			WHERE station_id = $1 AND transaction_id = $2 AND end_time IS NULL
-		`, stationID, *transactionID, meterWh, stoppedAt, pricePerKWh)
+		`, stationID, *transactionID, meterWh, stoppedAt, quote.PricePerKWh, quote.TariffName, quote.StationPowerClass)
 		return err
 	}
 	_, err := s.pool.Exec(ctx, `
@@ -154,6 +196,9 @@ func (s *Store) StopSession(ctx context.Context, stationID string, transactionID
 			end_meter_wh = $2,
 			total_kwh = GREATEST(($2 - start_meter_wh)::double precision / 1000.0, 0),
 			total_cost = GREATEST(($2 - start_meter_wh)::double precision / 1000.0, 0) * $4,
+			price_per_kwh = $4,
+			pricing_tariff = $5,
+			station_power_class = $6,
 			updated_at = now()
 		WHERE id = (
 			SELECT id FROM charging_sessions
@@ -161,11 +206,12 @@ func (s *Store) StopSession(ctx context.Context, stationID string, transactionID
 			ORDER BY start_time DESC
 			LIMIT 1
 		)
-	`, stationID, meterWh, stoppedAt, pricePerKWh)
+	`, stationID, meterWh, stoppedAt, quote.PricePerKWh, quote.TariffName, quote.StationPowerClass)
 	return err
 }
 
 func (s *Store) InsertMeterValue(ctx context.Context, value MeterValue) (Station, error) {
+	defer metrics.ObserveDBWrite("insert_meter", time.Now())
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return Station{}, err
@@ -234,7 +280,7 @@ func (s *Store) GetStation(ctx context.Context, stationID string) (Station, erro
 
 func (s *Store) ListSessions(ctx context.Context, stationID string, limit int) ([]ChargingSession, error) {
 	rows, err := s.pool.Query(ctx, `
-		SELECT id::text, transaction_id, station_id, start_time, end_time, start_meter_wh, end_meter_wh, total_kwh, total_cost
+		SELECT id::text, transaction_id, station_id, start_time, end_time, start_meter_wh, end_meter_wh, total_kwh, total_cost, price_per_kwh, pricing_tariff, station_power_class
 		FROM charging_sessions
 		WHERE station_id = $1
 		ORDER BY start_time DESC
@@ -248,12 +294,70 @@ func (s *Store) ListSessions(ctx context.Context, stationID string, limit int) (
 	sessions := make([]ChargingSession, 0)
 	for rows.Next() {
 		var session ChargingSession
-		if err := rows.Scan(&session.ID, &session.TransactionID, &session.StationID, &session.StartTime, &session.EndTime, &session.StartMeterWh, &session.EndMeterWh, &session.TotalKWh, &session.TotalCost); err != nil {
+		if err := rows.Scan(&session.ID, &session.TransactionID, &session.StationID, &session.StartTime, &session.EndTime, &session.StartMeterWh, &session.EndMeterWh, &session.TotalKWh, &session.TotalCost, &session.PricePerKWh, &session.PricingTariff, &session.PowerClass); err != nil {
 			return nil, err
 		}
 		sessions = append(sessions, session)
 	}
 	return sessions, rows.Err()
+}
+
+func (s *Store) CreateCommand(ctx context.Context, stationID, command string, transactionID *string) (StationCommand, error) {
+	defer metrics.ObserveDBWrite("create_command", time.Now())
+	row := s.pool.QueryRow(ctx, `
+		INSERT INTO station_commands (station_id, command, transaction_id)
+		VALUES ($1, $2, $3)
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+	`, stationID, command, transactionID)
+	return scanCommand(row)
+}
+
+func (s *Store) MarkCommandSent(ctx context.Context, commandID string) (StationCommand, error) {
+	defer metrics.ObserveDBWrite("mark_command_sent", time.Now())
+	row := s.pool.QueryRow(ctx, `
+		UPDATE station_commands
+		SET status = 'sent',
+			sent_at = COALESCE(sent_at, now()),
+			error_message = NULL,
+			updated_at = now()
+		WHERE id = $1
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+	`, commandID)
+	return scanCommand(row)
+}
+
+func (s *Store) MarkCommandFailed(ctx context.Context, commandID string, publishErr error) (StationCommand, error) {
+	defer metrics.ObserveDBWrite("mark_command_failed", time.Now())
+	errText := ""
+	if publishErr != nil {
+		errText = publishErr.Error()
+	}
+	row := s.pool.QueryRow(ctx, `
+		UPDATE station_commands
+		SET status = 'failed',
+			error_message = $2,
+			updated_at = now()
+		WHERE id = $1
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+	`, commandID, errText)
+	return scanCommand(row)
+}
+
+func (s *Store) AckCommand(ctx context.Context, commandID, status, reason string) (StationCommand, error) {
+	defer metrics.ObserveDBWrite("ack_command", time.Now())
+	if status != "acked" {
+		status = "failed"
+	}
+	row := s.pool.QueryRow(ctx, `
+		UPDATE station_commands
+		SET status = $2,
+			error_message = NULLIF($3, ''),
+			acked_at = now(),
+			updated_at = now()
+		WHERE id = $1
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+	`, commandID, status, reason)
+	return scanCommand(row)
 }
 
 func (s *Store) ListMeterValues(ctx context.Context, stationID string, since time.Time, limit int) ([]MeterValue, error) {
@@ -320,4 +424,21 @@ func scanStation(row pgx.Row) (Station, error) {
 		&station.UpdatedAt,
 	)
 	return station, err
+}
+
+func scanCommand(row pgx.Row) (StationCommand, error) {
+	var command StationCommand
+	err := row.Scan(
+		&command.ID,
+		&command.StationID,
+		&command.Command,
+		&command.TransactionID,
+		&command.Status,
+		&command.ErrorMessage,
+		&command.QueuedAt,
+		&command.SentAt,
+		&command.AckedAt,
+		&command.UpdatedAt,
+	)
+	return command, err
 }

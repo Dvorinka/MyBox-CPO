@@ -11,6 +11,12 @@ paths:
       responses:
         "200":
           description: Backend is healthy
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: Prometheus text exposition
   /api/events:
     get:
       summary: Server-Sent Events stream for station and meter updates
@@ -108,11 +114,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [station_id, transaction_id]
+                required: [station_id, transaction_id, command_id, command_status]
                 properties:
                   station_id:
                     type: string
                   transaction_id:
+                    type: string
+                  command_id:
+                    type: string
+                    format: uuid
+                  command_status:
                     type: string
   /api/stations/{id}/stop:
     post:
@@ -126,11 +137,16 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [station_id, status]
+                required: [station_id, status, command_id, command_status]
                 properties:
                   station_id:
                     type: string
                   status:
+                    type: string
+                  command_id:
+                    type: string
+                    format: uuid
+                  command_status:
                     type: string
 components:
   parameters:
@@ -202,6 +218,16 @@ components:
         total_cost:
           type: number
           format: double
+          nullable: true
+        price_per_kwh:
+          type: number
+          format: double
+          nullable: true
+        pricing_tariff:
+          type: string
+          nullable: true
+        station_power_class:
+          type: string
           nullable: true
     MeterValue:
       type: object

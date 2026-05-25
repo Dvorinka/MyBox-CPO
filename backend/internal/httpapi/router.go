@@ -9,12 +9,14 @@ import (
 
 	"mybox-cpo/backend/internal/config"
 	"mybox-cpo/backend/internal/db"
+	"mybox-cpo/backend/internal/metrics"
 	mqttsvc "mybox-cpo/backend/internal/mqtt"
 	"mybox-cpo/backend/internal/realtime"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
@@ -43,6 +45,7 @@ func NewRouter(cfg config.Config, store *db.Store, mqtt *mqttsvc.Service, hub *r
 	}))
 
 	router.GET("/health", api.health)
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 	group := router.Group("/api")
 	group.GET("/events", api.events)
 	group.GET("/stations", api.listStations)
@@ -112,12 +115,17 @@ func (a *API) startCharging(c *gin.Context) {
 		a.fail(c, http.StatusInternalServerError, "get station failed", err)
 		return
 	}
-	transactionID, err := a.mqtt.StartCharging(c.Request.Context(), stationID)
+	transactionID, command, err := a.mqtt.StartCharging(c.Request.Context(), stationID)
 	if err != nil {
 		a.fail(c, http.StatusBadGateway, "start command failed", err)
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"station_id": stationID, "transaction_id": transactionID})
+	c.JSON(http.StatusAccepted, gin.H{
+		"station_id":     stationID,
+		"transaction_id": transactionID,
+		"command_id":     command.ID,
+		"command_status": command.Status,
+	})
 }
 
 func (a *API) stopCharging(c *gin.Context) {
@@ -130,11 +138,17 @@ func (a *API) stopCharging(c *gin.Context) {
 		a.fail(c, http.StatusInternalServerError, "get station failed", err)
 		return
 	}
-	if err := a.mqtt.StopCharging(c.Request.Context(), stationID); err != nil {
+	command, err := a.mqtt.StopCharging(c.Request.Context(), stationID)
+	if err != nil {
 		a.fail(c, http.StatusBadGateway, "stop command failed", err)
 		return
 	}
-	c.JSON(http.StatusAccepted, gin.H{"station_id": stationID, "status": "queued"})
+	c.JSON(http.StatusAccepted, gin.H{
+		"station_id":     stationID,
+		"status":         command.Status,
+		"command_id":     command.ID,
+		"command_status": command.Status,
+	})
 }
 
 func (a *API) events(c *gin.Context) {
@@ -201,5 +215,6 @@ func requestLogger(logger *zap.Logger) gin.HandlerFunc {
 			zap.Int("status", c.Writer.Status()),
 			zap.Duration("latency", time.Since(start)),
 		)
+		metrics.ObserveHTTPRequest(c.Request.Method, c.FullPath(), c.Writer.Status())
 	}
 }

@@ -8,9 +8,9 @@
                                        Postgres
 ```
 
-Backend je Go služba s Gin REST API, Paho MQTT klientem, pgx přístupem do Postgresu a zap logováním. Simulátor je samostatná Go binárka spuštěná pětkrát přes Docker Compose s odlišným `STATION_ID`, `MAX_POWER_KW` a `FAULT_PROBABILITY`.
+Backend je Go služba s Gin REST API, Paho MQTT klientem, pgx přístupem do Postgresu, zap logováním a Prometheus metrikami. Simulátor je samostatná Go binárka spuštěná pětkrát přes Docker Compose s odlišným `STATION_ID`, `MAX_POWER_KW` a `FAULT_PROBABILITY`.
 
-Postgres drží aktuální stav stanic, charging sessions a `meter_values` jako jednoduchou time-series tabulku. Backend drží jen lightweight runtime věci: MQTT spojení, SSE subscribery a offline ticker. Zdroj pravdy je databáze.
+Postgres drží aktuální stav stanic, charging sessions, `meter_values` jako jednoduchou time-series tabulku a `station_commands` jako command outbox. Backend drží jen lightweight runtime věci: MQTT spojení, SSE subscribery a offline ticker. Zdroj pravdy je databáze.
 
 ## Klíčové tradeoffs
 
@@ -40,33 +40,33 @@ Aktuální stav je v Postgresu, ne v Redis cache. Backend má jen transient SSE 
 
 ### Error handling
 
-Backend má retry na DB/MQTT connect, MQTT auto-reconnect, idempotentní migration runner a idempotentní session start podle `transaction_id`. Dead letter queue jsem nepřidal; pro demo stačí logování a reconnect. Pro produkci bych doplnil command state machine a outbox.
+Backend má retry na DB/MQTT connect, MQTT auto-reconnect, idempotentní migration runner a idempotentní session start podle `transaction_id`. REST příkazy se ukládají do `station_commands` se stavem `queued/sent/acked/failed`; simulátor posílá MQTT ack. Dead letter queue jsem nepřidal, protože pro demo stačí explicitní command state a logování.
 
 ## Co bych udělal jinak s víc časem
 
-- Přidal bych sqlc generování a OpenAPI client generation do CI, aby kontrakty nebyly ručně držené.
-- Přidal bych integration test přes testcontainers s Postgres + MQTT brokerem.
-- Přidal bych command queue s explicitním stavem `queued/sent/acked/failed`.
-- Rozšířil bych pricing na tarify podle času a station typu.
-- Přidal bych Prometheus metriky pro MQTT reconnects, dropped SSE events a DB write latency.
+- Dotáhl bych sqlc generování a OpenAPI client generation do CI, aby kontrakty nebyly ručně držené.
+- Rozšířil bych integration testy na plný compose smoke test s reálným Mosquitto brokerem.
+- Přidal bych command retry worker, který umí znovu odeslat dlouho visící `queued/sent` příkazy.
+- Doplnil bych station identity/auth, aby se dvě stanice nemohly hlásit pod stejným ID.
+- Přidal bych TimescaleDB/partitioning pro dlouhodobou historii meter values.
 
 ## Slabá místa současného řešení
 
 - Jeden backend proces je zároveň API, MQTT consumer i offline detector. Pro 10 000 stanic bych rozdělil ingestion a API.
-- MQTT broker restart uprostřed session neztratí DB state, ale může ztratit command in-flight bez command outboxu.
+- MQTT broker restart uprostřed session neztratí DB state ani command record, ale aktuálně chybí automatický retry worker pro visící příkazy.
 - Pokud se připojí dvě stanice se stejným ID, poslední publisher vyhrává. Produkčně by musel existovat station identity/auth layer.
 - Clock drift ze stanic by mohl zkreslit grafy; backend teď důvěřuje timestampu z payloadu.
-- Docker smoke na tomto stroji narazil na lokální Docker Desktop/buildx snapshot chybu, takže runtime ověření přes compose je potřeba zopakovat po restartu Dockeru.
+- Docker smoke na tomto stroji narazil na lokální Docker Desktop/buildx snapshot chybu, takže runtime ověření přes compose je potřeba zopakovat po restartu Dockeru; Go build/test část je validovaná.
 
 ## Čas
 
-Aktuální backend/simulator pass: přibližně 4.5 h.
+Aktuální backend/simulator pass: přibližně 6.5 h.
 
 - discovery/repo/skill refs: 0.5 h
-- backend: 2.0 h
-- simulátor: 0.8 h
+- backend: 3.1 h
+- simulátor: 1.0 h
 - Docker setup: 0.6 h
-- dokumentace a ověření: 0.6 h
+- dokumentace a ověření: 1.3 h
 
 Frontend čas není započítaný; dashboard dělá paralelně Kimi.
 
