@@ -5,8 +5,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => {
     const stored = localStorage.getItem("mybox-locale")
     if (stored === "cs" || stored === "en") return stored
-    const browser = navigator.language.slice(0, 2)
-    return browser === "cs" ? "cs" : "en"
+    return "cs"
   })
 
   const setLocale = useCallback((l: Locale) => {

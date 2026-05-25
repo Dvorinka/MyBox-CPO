@@ -58,7 +58,7 @@
 
 ## Čas
 
-Celkem **6 hodin 45 minut**.
+Celkem **7 hodin 45 minut**.
 
 | Co | Čas |
 |---|---|

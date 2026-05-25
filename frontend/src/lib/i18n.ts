@@ -65,6 +65,9 @@ const dictionary = {
     tariff: "Tariff",
     cost: "Cost",
     inProgress: "In progress",
+    location: "Location",
+    stationFaulted: "Station Faulted",
+    stationFaultedDesc: "This station is reporting a fault. Please check the hardware or contact support.",
 
     // Status
     statusAvailable: "Available",
@@ -80,6 +83,8 @@ const dictionary = {
     acVsDc: "AC vs DC charging",
     uptime: "Uptime %",
     sessionDuration: "Session duration",
+    fleetMap: "Fleet Map",
+    stationStatus: "Station Status",
 
     // Auth
     login: "Login",
@@ -142,6 +147,9 @@ const dictionary = {
     tariff: "Tarif",
     cost: "Cena",
     inProgress: "Probíhá",
+    location: "Poloha",
+    stationFaulted: "Stanice v chybovém stavu",
+    stationFaultedDesc: "Tato stanice hlásí chybu. Zkontrolujte hardware nebo kontaktujte podporu.",
 
     // Status
     statusAvailable: "Dostupná",
@@ -157,6 +165,8 @@ const dictionary = {
     acVsDc: "AC vs DC nabíjení",
     uptime: "Dostupnost %",
     sessionDuration: "Délka sezení",
+    fleetMap: "Mapa flotily",
+    stationStatus: "Stav stanic",
 
     // Auth
     login: "Přihlášení",

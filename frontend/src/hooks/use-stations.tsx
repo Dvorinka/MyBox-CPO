@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useCallback } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { toast } from "sonner"
 import type { MeterValue, Station, StationCommand } from "@/types"
 import { api, subscribeEvents } from "@/lib/api"
 
@@ -71,21 +72,41 @@ export function StationsProvider({ children }: { children: React.ReactNode }) {
   }, [queryClient])
 
   const startCharging = useCallback(async (id: string) => {
-    await api.startCharging(id)
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["stations"] }),
-      queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
-    ])
+    try {
+      await api.startCharging(id)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stations"] }),
+        queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
+      ])
+      toast.success(`Start charging command sent to ${id}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      toast.error(`Start charging failed for ${id}`, {
+        description: message.includes("502") || message.includes("Bad Gateway")
+          ? "Simulator or MQTT broker may be offline."
+          : message,
+      })
+    }
   }, [queryClient])
 
   const stopCharging = useCallback(async (id: string) => {
-    await api.stopCharging(id)
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["stations"] }),
-      queryClient.invalidateQueries({ queryKey: ["sessions", id] }),
-      queryClient.invalidateQueries({ queryKey: ["meter-values", id] }),
-      queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
-    ])
+    try {
+      await api.stopCharging(id)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["stations"] }),
+        queryClient.invalidateQueries({ queryKey: ["sessions", id] }),
+        queryClient.invalidateQueries({ queryKey: ["meter-values", id] }),
+        queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
+      ])
+      toast.success(`Stop charging command sent to ${id}`)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error"
+      toast.error(`Stop charging failed for ${id}`, {
+        description: message.includes("502") || message.includes("Bad Gateway")
+          ? "Simulator or MQTT broker may be offline."
+          : message,
+      })
+    }
   }, [queryClient])
 
   return (

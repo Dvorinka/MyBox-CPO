@@ -8,6 +8,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  RadialBarChart,
+  RadialBar,
+  PolarGrid,
+  PolarRadiusAxis,
+  Label,
 } from "recharts"
 import { Card, CardContent } from "@/components/ui/card"
 import type { ChargingSession, Station } from "@/types"
@@ -81,9 +86,30 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       const total = stSessions.length
       const completed = stSessions.filter((s) => s.end_time !== null).length
       const uptime = total > 0 ? Math.round((completed / total) * 100) : 100
-      return { id: st.id, uptime }
+      return { id: st.id, uptime, fill: "#2596be" }
     })
   }, [stations, sessions])
+
+  // Station status distribution for radial grid
+  const statusDistribution = useMemo(() => {
+    const counts: Record<string, number> = {}
+    stations.forEach((s) => {
+      counts[s.status] = (counts[s.status] ?? 0) + 1
+    })
+    const colors: Record<string, string> = {
+      Available: "var(--chart-1)",
+      Charging: "var(--chart-2)",
+      Preparing: "var(--chart-3)",
+      Faulted: "var(--color-destructive)",
+      Offline: "var(--chart-5)",
+      Finishing: "var(--chart-4)",
+    }
+    return Object.entries(counts).map(([status, count]) => ({
+      name: status,
+      visitors: count,
+      fill: colors[status] ?? "#94a3b8",
+    }))
+  }, [stations])
 
   // Session duration histogram (completed sessions only)
   const durationHistogram = useMemo(() => {
@@ -143,26 +169,24 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
               {t("noChargingDataYet")}
             </div>
           ) : (
-            <div className="space-y-3">
-              {topStations.map((st, i) => (
-                <div key={st.id} className="flex items-center gap-3">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#102472] text-[10px] font-bold text-white">
-                    {i + 1}
-                  </span>
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium">{st.id}</span>
-                      <span className="text-xs tabular-nums text-muted-foreground">{st.kwh} kWh</span>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-[#2596be]"
-                        style={{ width: `${Math.min(100, (st.kwh / (topStations[0]?.kwh || 1)) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="h-[180px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={topStations} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <XAxis
+                    dataKey="id"
+                    tick={{ fontSize: 10, fill: "#64748b" }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={0}
+                  />
+                  <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} unit=" kWh" />
+                  <Tooltip
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
+                  />
+                  <Bar dataKey="kwh" fill="#102472" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           )}
         </CardContent>
@@ -194,37 +218,95 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
         </CardContent>
       </Card>
 
-      {/* Uptime */}
+      {/* Uptime radial pills */}
       <Card className="border-none shadow-none">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("uptime")}
           </h3>
-          <div className="space-y-3">
-            {uptimeStats.map((st) => (
-              <div key={st.id} className="flex items-center gap-3">
-                <span className="w-20 text-xs font-medium">{st.id}</span>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between">
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-[#2596be]"
-                        style={{ width: `${st.uptime}%` }}
-                      />
-                    </div>
-                    <span className="ml-2 w-8 text-right text-[10px] tabular-nums text-muted-foreground">
-                      {st.uptime}%
-                    </span>
+          {uptimeStats.length === 0 ? (
+            <div className="flex h-[180px] items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
+              {t("noChargingDataYet")}
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-3">
+              {uptimeStats.map((st) => (
+                <Card key={st.id} className="flex flex-col items-center border p-3">
+                  <span className="mb-1 text-[10px] font-medium text-muted-foreground">{st.id}</span>
+                  <div className="h-[80px] w-[80px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadialBarChart
+                        data={[{ name: st.id, uptime: st.uptime, fill: st.uptime >= 90 ? "#2596be" : st.uptime >= 70 ? "#38bdf8" : "#ef4444" }]}
+                        innerRadius="65%"
+                        outerRadius="100%"
+                        startAngle={90}
+                        endAngle={-270}
+                      >
+                        <RadialBar
+                          background
+                          dataKey="uptime"
+                          cornerRadius={4}
+                          fill={st.uptime >= 90 ? "#2596be" : st.uptime >= 70 ? "#38bdf8" : "#ef4444"}
+                        />
+                        <PolarRadiusAxis tick={false} axisLine={false}>
+                          <Label
+                            content={({ viewBox }) => {
+                              if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                return (
+                                  <text
+                                    x={viewBox.cx}
+                                    y={viewBox.cy}
+                                    textAnchor="middle"
+                                    dominantBaseline="middle"
+                                  >
+                                    <tspan className="fill-foreground text-sm font-bold">
+                                      {st.uptime}%
+                                    </tspan>
+                                  </text>
+                                )
+                              }
+                              return null
+                            }}
+                          />
+                        </PolarRadiusAxis>
+                      </RadialBarChart>
+                    </ResponsiveContainer>
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Station Status Distribution - Radial Grid */}
+      <Card className="border-none shadow-none">
+        <CardContent className="p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("stationStatus")}
+          </h3>
+          {statusDistribution.length === 0 ? (
+            <div className="flex h-[180px] items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
+              {t("noStationsConnected")}
+            </div>
+          ) : (
+            <div className="h-[180px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadialBarChart data={statusDistribution} innerRadius="20%" outerRadius="90%">
+                  <PolarGrid gridType="circle" />
+                  <RadialBar dataKey="visitors" />
+                  <Tooltip
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
+                  />
+                </RadialBarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* Session Duration Histogram */}
-      <Card className="border-none shadow-none md:col-span-2">
+      <Card className="border-none shadow-none">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("sessionDuration")}

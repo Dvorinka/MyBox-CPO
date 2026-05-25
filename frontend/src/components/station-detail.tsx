@@ -25,9 +25,10 @@ import type { Station, MeterValue, ChargingSession } from "@/types"
 import { api } from "@/lib/api"
 import { statusVariant } from "@/lib/status"
 import { useI18n } from "@/lib/i18n"
-import { Power, Battery, CreditCard, Play, Square } from "lucide-react"
+import { Power, Battery, CreditCard, Play, Square, MapPin, AlertTriangle } from "lucide-react"
 import { useStations } from "@/hooks/use-stations"
-import { cn } from "@/lib/utils"
+import { cn, getStationLocation } from "@/lib/utils"
+import { Map, MapMarker, MarkerContent, MarkerTooltip } from "@/components/ui/map"
 
 interface StationDetailProps {
   station: Station | null
@@ -65,6 +66,13 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
     const timer = window.setTimeout(() => setChartReadyFor(stationID), 100)
     return () => window.clearTimeout(timer)
   }, [open, stationID])
+
+  useEffect(() => {
+    if (!open) {
+      setChartReadyFor(null)
+      setChartWidth(0)
+    }
+  }, [open])
 
   useEffect(() => {
     if (!open || !chartReady) return
@@ -251,6 +259,51 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                     </div>
                   )}
                 </div>
+
+                {/* Map */}
+                <div>
+                  <h4 className="mb-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                    <MapPin className="h-3.5 w-3.5" />
+                    {t("location")}
+                  </h4>
+                  <div className="h-[220px] w-full overflow-hidden rounded-lg border">
+                    {station && (
+                      <Map
+                        center={[
+                          getStationLocation(station.id).longitude,
+                          getStationLocation(station.id).latitude,
+                        ]}
+                        zoom={14}
+                      >
+                        <MapMarker
+                          longitude={getStationLocation(station.id).longitude}
+                          latitude={getStationLocation(station.id).latitude}
+                        >
+                          <MarkerContent>
+                            <div
+                              className={cn(
+                                "size-5 rounded-full border-2 border-white shadow-lg",
+                                station.status === "Faulted" ? "bg-red-500" : "bg-[#102472]"
+                              )}
+                            />
+                          </MarkerContent>
+                          <MarkerTooltip>{station.id}</MarkerTooltip>
+                        </MapMarker>
+                      </Map>
+                    )}
+                  </div>
+                </div>
+
+                {/* Fault alert */}
+                {station.status === "Faulted" && (
+                  <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div>
+                      <p className="font-medium">{t("stationFaulted")}</p>
+                      <p className="mt-0.5 text-red-600/80">{t("stationFaultedDesc")}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Actions */}
                 <div className="flex gap-3">

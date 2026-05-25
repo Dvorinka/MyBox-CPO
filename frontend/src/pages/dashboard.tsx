@@ -12,6 +12,8 @@ import { api } from "@/lib/api"
 import { statusVariant, statusDotColor } from "@/lib/status"
 import ChargingHeatmap from "@/components/charging-heatmap"
 import Analytics from "@/components/analytics"
+import { Map, MapMarker, MarkerContent, MarkerTooltip, MapPopup } from "@/components/ui/map"
+import { cn, getStationLocation } from "@/lib/utils"
 import {
   Zap,
   Activity,
@@ -21,6 +23,7 @@ import {
   RefreshCw,
   Play,
   Square,
+  MapPin,
 } from "lucide-react"
 
 const StationDetail = lazy(() => import("@/components/station-detail"))
@@ -186,6 +189,62 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Fleet Map */}
+      <div>
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          <MapPin className="h-3.5 w-3.5" />
+          {t("fleetMap")}
+        </h2>
+        <div className="h-[320px] w-full overflow-hidden rounded-xl border">
+          <Map center={[14.4378, 50.0755]} zoom={11}>
+            {stations.map((station) => {
+              const loc = getStationLocation(station.id)
+              return (
+                <MapMarker
+                  key={station.id}
+                  longitude={loc.longitude}
+                  latitude={loc.latitude}
+                >
+                  <MarkerContent>
+                    <button
+                      onClick={() => openDetail(station)}
+                      className={cn(
+                        "size-5 rounded-full border-2 border-white shadow-lg transition-transform hover:scale-110",
+                        station.status === "Faulted"
+                          ? "bg-red-500"
+                          : station.status === "Charging"
+                          ? "bg-[#102472]"
+                          : "bg-[#2596be]"
+                      )}
+                    />
+                  </MarkerContent>
+                  <MarkerTooltip>{station.id}</MarkerTooltip>
+                  <MapPopup
+                    longitude={loc.longitude}
+                    latitude={loc.latitude}
+                  >
+                    <div className="space-y-1">
+                      <p className="text-foreground font-medium">{station.id}</p>
+                      <p className="text-muted-foreground text-xs">
+                        {station.status} · {station.current_power_kw.toFixed(1)} kW
+                      </p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-1 w-full text-xs"
+                        onClick={() => openDetail(station)}
+                      >
+                        {t("details")}
+                      </Button>
+                    </div>
+                  </MapPopup>
+                </MapMarker>
+              )
+            })}
+          </Map>
+        </div>
+      </div>
+
       {/* Analytics widgets */}
       <Analytics sessions={allSessions} stations={stations} />
 
@@ -253,9 +312,19 @@ function StationCard({
       ? "bg-[#102472]/70"
       : "bg-[#2596be]"
 
+  const borderClass =
+    station.status === "Charging"
+      ? "border-[#102472] ring-1 ring-[#102472]/20"
+      : station.status === "Faulted"
+      ? "border-red-400 ring-1 ring-red-400/20"
+      : "border"
+
   return (
     <Card
-      className="group cursor-pointer border transition-all duration-300 hover:border-[#2596be]/30 hover:bg-slate-50/50"
+      className={cn(
+        "group cursor-pointer transition-all duration-300 hover:border-[#2596be]/30 hover:bg-slate-50/50",
+        borderClass
+      )}
       onClick={onClick}
     >
       <CardContent className="p-5">

@@ -7,6 +7,8 @@ export interface Station {
   current_meter_wh: number
   active_transaction_id: string | null
   updated_at: string
+  latitude?: number
+  longitude?: number
 }
 
 export interface ChargingSession {
