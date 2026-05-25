@@ -9,52 +9,48 @@ Generated for submission readiness and interview prep.
 
 | Area | vs hard requirements | Maturity |
 |------|----------------------|----------|
-| **Simulator** | Largely complete | ~90% |
+| **Simulator** | Complete | ~92% |
 | **Mosquitto** | Complete (minimal, intentional) | ~95% |
-| **Backend** | Largely complete + extras | ~85% |
-| **Frontend** | UI built, live updates broken | ~70% |
-| **Docker / docs** | Blockers for reviewers | ~60% |
+| **Backend** | Complete + extras | ~90% |
+| **Frontend** | UI built, live updates wired | ~85% |
+| **Docker / docs** | Submission-ready baseline | ~85% |
 
-**Not submission-ready until P0 items are fixed** (Docker build, SSE live updates, README accuracy).
+P0 blockers identified below have been remediated in the current codebase. Remaining work is polish and optional hardening.
 
 ---
 
 ## Critical blockers (P0)
 
-### 1. `docker compose up --build` fails
+### 1. `docker compose up --build` fails — fixed
 
 - `backend/go.mod` requires **Go 1.25.0**
-- `backend/Dockerfile` and `simulator/Dockerfile` use **`golang:1.23-alpine`**
+- `backend/Dockerfile` and `simulator/Dockerfile` now use **`golang:1.25-alpine`**
 - Build error: `go.mod requires go >= 1.25.0 (running go 1.23.12)`
 
-**Fix:** Use `golang:1.25-alpine` in Dockerfiles, or lower `go` version in `go.mod` to match the image.
+**Fix applied:** Use `golang:1.25-alpine` in Dockerfiles.
 
-### 2. Frontend real-time updates do not work
+### 2. Frontend real-time updates do not work — fixed
 
 TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 
 | Layer | Actual behavior |
 |-------|-----------------|
 | Backend SSE | Sends `event: station_update` with raw station JSON in `data:` |
-| Frontend `api.ts` | Listens for `station_updated` (wrong name) |
-| Frontend `use-stations.tsx` | Handles `type === "station_updated"` only |
-| `onmessage` handler | Expects `{ type, data }` wrapper — server does not send that |
+| Frontend `api.ts` | Listens for `station_update`, `meter_value`, `command_update`, `heartbeat` |
+| Frontend `use-stations.tsx` | Updates station cache and live meter cache from SSE |
+| Detail dialog | Uses live station cache instead of stale open-time snapshot |
 
-**Effect:** Dashboard updates only on initial load and manual **Refresh**.
-
-**Fix:**
+**Fix applied:**
 
 - Listen for `station_update` (match backend `hub.Broadcast` / `httpapi` event type)
 - Parse `(e as MessageEvent).data` directly as `Station`
-- Optionally handle `meter_value` and `command_update` for charts and command feedback
+- Handle `meter_value` and `command_update` for charts and session refresh
 
-### 3. README is outdated
+### 3. README is outdated — fixed
 
-- Still describes frontend as an **nginx placeholder**
-- Frontend is a built React app served by nginx
-- Missing a dedicated **Architecture** section (TASK asks Setup / Run / Test / Architecture)
-
-**Fix:** Rewrite frontend section, add architecture diagram or short stack overview, align curl/SSE examples with working event names.
+- Frontend documented as built React app served by nginx
+- Dedicated **Setup**, **Run**, **Test API Flow**, and **Architecture** sections present
+- SSE examples align with working event names
 
 ---
 
@@ -131,8 +127,8 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 
 | Issue | Severity |
 |-------|----------|
-| Docker Go version mismatch | **P0** |
-| Offline does not close open charging sessions — `MarkOffline` clears `active_transaction_id` but does not end session rows | Medium |
+| Docker Go version mismatch | Fixed |
+| Offline does not close open charging sessions — `MarkOffline` clears `active_transaction_id` but does not end session rows | Fixed |
 | No end-to-end MQTT/HTTP integration tests | Low (bonus) |
 | No command retry worker for stuck `queued`/`sent` commands | Low (noted in DESIGN.md) |
 | REST start returns 404 until station exists in DB (first telemetry) | Low — document in README |
@@ -156,18 +152,13 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 
 | TASK requirement | Actual state |
 |------------------|--------------|
-| Live view without F5 | **Broken** (SSE bug — see P0) |
+| Live view without F5 | Fixed with SSE cache updates |
 | Table of 5 stations | Card grid (acceptable per “usable UI”) |
-| Chart of power **and** energy | Power only; energy not plotted |
+| Chart of power **and** energy | Fixed: dual-axis power + cumulative energy |
 
 #### Other frontend improvements (P1+)
 
-- Detail dialog keeps snapshot of `station` — does not update from SSE while open
-- Chart and sessions reload only when dialog opens, not after Start/Stop
-- `meter_value` SSE events ignored — no live chart during charging
-- `command_update` SSE ignored — no toast/feedback on command ack/fail
-- `error` from `useStations` never shown in UI
-- Session types omit `price_per_kwh`, `pricing_tariff` from API
+- No toast/feedback on command ack/fail yet; command events refresh session data only
 - No dedicated route per station (modal only — OK for demo)
 
 ---
@@ -185,9 +176,9 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 
 | Item | Status |
 |------|--------|
-| `docker compose up --build` OOTB | **Fails** (Go version) |
-| README accuracy | **Stale** (placeholder frontend) |
-| README Architecture section | Missing |
+| `docker compose up --build` OOTB | Fixed at Dockerfile level; smoke test still recommended |
+| README accuracy | Fixed |
+| README Architecture section | Present |
 | Full compose smoke test documented | Not verified (DESIGN.md notes local Docker issues) |
 | Backend HEALTHCHECK in Dockerfile | Present but not used in compose `depends_on` for frontend |
 
@@ -212,16 +203,15 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 
 ### P0 — must fix before submission
 
-1. **Align Go versions** — `golang:1.25-alpine` in `backend/Dockerfile` or lower `go` in `go.mod` to match image.
-2. **Fix SSE** — `station_update` event name; parse `data` as `Station`; wire `use-stations` and optional detail refresh.
-3. **Update README** — real frontend, architecture, remove placeholder wording; document wait-for-simulators before API start.
+1. **Align Go versions** — fixed with `golang:1.25-alpine`.
+2. **Fix SSE** — fixed with `station_update`, `meter_value`, and `command_update` handlers.
+3. **Update README** — fixed with setup, run, test, and architecture sections.
 
 ### P1 — strong polish
 
-4. Refresh station detail + chart/sessions after SSE or after Start/Stop.
-5. Add energy series to chart (TASK mentions power and energy).
-6. On offline: close or finalize active charging session in DB.
-7. Run full `docker compose up` smoke test; record result in DESIGN.md.
+4. Run full `docker compose up` smoke test; record result in DESIGN.md.
+5. Add command ack toast/status feedback.
+6. Add compose-level smoke test.
 
 ### P2 — nice to have
 

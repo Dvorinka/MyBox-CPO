@@ -134,7 +134,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                 {/* Chart */}
                 <div>
                   <h4 className="mb-3 text-sm font-medium text-muted-foreground">
-                    Power History (last 30 min)
+                    Power and energy history (last 30 min)
                   </h4>
                   {loadingChart ? (
                     <Skeleton className="h-[240px] w-full rounded-lg" />
@@ -151,6 +151,10 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                               <stop offset="5%" stopColor="#2596be" stopOpacity={0.2} />
                               <stop offset="95%" stopColor="#2596be" stopOpacity={0} />
                             </linearGradient>
+                            <linearGradient id="energyGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#102472" stopOpacity={0.14} />
+                              <stop offset="95%" stopColor="#102472" stopOpacity={0} />
+                            </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                           <XAxis
@@ -160,12 +164,26 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                             axisLine={{ stroke: "#e2e8f0" }}
                           />
                           <YAxis
+                            yAxisId="power"
                             tick={{ fontSize: 11, fill: "#64748b" }}
                             tickLine={false}
                             axisLine={false}
                             unit=" kW"
                           />
+                          <YAxis
+                            yAxisId="energy"
+                            orientation="right"
+                            tick={{ fontSize: 11, fill: "#64748b" }}
+                            tickLine={false}
+                            axisLine={false}
+                            unit=" kWh"
+                          />
                           <Tooltip
+                            formatter={(value, name) => {
+                              const label = name === "power" ? "Power" : "Energy"
+                              const unit = name === "power" ? "kW" : "kWh"
+                              return [`${Number(value).toFixed(2)} ${unit}`, label]
+                            }}
                             contentStyle={{
                               borderRadius: "8px",
                               border: "1px solid #e2e8f0",
@@ -173,12 +191,28 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                             }}
                           />
                           <Area
+                            yAxisId="energy"
+                            type="monotone"
+                            dataKey="energy"
+                            stroke="#102472"
+                            strokeWidth={2}
+                            fill="url(#energyGradient)"
+                            dot={false}
+                            isAnimationActive={true}
+                            animationDuration={700}
+                            animationEasing="ease-out"
+                          />
+                          <Area
+                            yAxisId="power"
                             type="monotone"
                             dataKey="power"
                             stroke="#2596be"
                             strokeWidth={2}
                             fill="url(#powerGradient)"
                             dot={false}
+                            isAnimationActive={true}
+                            animationDuration={700}
+                            animationEasing="ease-out"
                           />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -228,6 +262,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                           <TableHead>End Time</TableHead>
                           <TableHead>Energy</TableHead>
                           <TableHead>Duration</TableHead>
+                          <TableHead>Tariff</TableHead>
                           <TableHead className="text-right">Cost</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -251,6 +286,9 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                                     new Date(s.end_time).getTime() - new Date(s.start_time).getTime()
                                   )
                                 : "In progress"}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {s.pricing_tariff ?? "—"}
                             </TableCell>
                             <TableCell className="text-right text-xs font-medium">
                               {s.total_cost !== null ? `${s.total_cost.toFixed(2)} CZK` : "—"}

@@ -13,6 +13,7 @@ import (
 	"mybox-cpo/backend/internal/db"
 	"mybox-cpo/backend/internal/httpapi"
 	mqttsvc "mybox-cpo/backend/internal/mqtt"
+	"mybox-cpo/backend/internal/pricing"
 	"mybox-cpo/backend/internal/realtime"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -99,6 +100,7 @@ func connectDB(ctx context.Context, databaseURL string, logger *zap.Logger) (*pg
 func runOfflineDetector(ctx context.Context, cfg config.Config, store *db.Store, hub *realtime.Hub, logger *zap.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
+	pricer := pricing.NewService(cfg)
 
 	for {
 		select {
@@ -110,7 +112,13 @@ func runOfflineDetector(ctx context.Context, cfg config.Config, store *db.Store,
 				logger.Error("offline scan failed", zap.Error(err))
 				continue
 			}
+			offlineAt := time.Now().UTC()
 			for _, station := range stations {
+				// Timed-out stations cannot send Available/Faulted, so finalize any open session here.
+				quote := pricer.Quote(station.MaxPowerKW, offlineAt)
+				if err := store.StopSession(ctx, station.ID, nil, station.CurrentMeterWh, offlineAt, quote); err != nil {
+					logger.Error("offline session close failed", zap.String("station_id", station.ID), zap.Error(err))
+				}
 				hub.Broadcast("station_update", station)
 			}
 		}

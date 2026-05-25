@@ -2,6 +2,15 @@
 
 A full-stack EV charging fleet management demo. The stack runs Mosquitto MQTT broker, Postgres, a Go backend, five Go station simulators, and a React + Vite + shadcn/ui frontend dashboard.
 
+## Setup
+
+Requirements:
+
+- Docker with Compose v2
+- Free local ports: `5173`, `8080`, `1883`, `5432`
+
+No local Go, Node, or Postgres install is required for the main demo. Docker builds backend, frontend, and simulator images.
+
 ## Run
 
 ```bash
@@ -23,6 +32,7 @@ The frontend is a React 19 SPA built with Vite, Tailwind CSS v4, and shadcn/ui c
 - **Live fleet overview** with color-coded station status cards and real-time SSE updates
 - **Station detail dialog** with power/energy metrics, interactive area chart (Recharts), and Start/Stop controls
 - **Charging session history** with duration, energy, and cost breakdown
+- **Charging activity heatmap** based on session energy by weekday and hour bucket
 - **Tesla-inspired minimal design** using the custom palette `#102472`, `#2596be`, `#ffffff`
 
 The dashboard auto-refreshes via Server-Sent Events (`/api/events`) so station states update without page reloads.
@@ -58,6 +68,12 @@ Live updates are available through Server-Sent Events:
 curl -N http://localhost:8080/api/events
 ```
 
+Expected SSE event names:
+
+- `station_update` - full station snapshot after status/meter/offline changes
+- `meter_value` - latest meter sample for live charts
+- `command_update` - command state after publish or simulator acknowledgement
+
 ## MQTT Contract
 
 Station telemetry topics:
@@ -82,7 +98,7 @@ Session lifecycle:
 
 - `Preparing` or `Charging` status with `transaction_id` creates the session.
 - `meter` messages append time-series power and cumulative Wh points.
-- `Available` or `Faulted` status closes the latest active session and computes `total_kwh`, `total_cost`, `price_per_kwh`, `pricing_tariff`, and station power class.
+- `Available`, `Faulted`, or offline timeout closes the latest active session and computes `total_kwh`, `total_cost`, `price_per_kwh`, `pricing_tariff`, and station power class.
 
 Command handling:
 
@@ -100,6 +116,16 @@ Pricing:
 Observability:
 
 - `/metrics` exposes Prometheus counters/histograms for HTTP requests, MQTT messages/reconnects, dropped SSE events, and DB write latency.
+
+## Architecture
+
+```text
+5x station simulator -> Mosquitto MQTT -> Go backend -> REST/SSE API -> React dashboard
+                                           |
+                                       Postgres
+```
+
+Postgres is the source of truth for stations, sessions, meter values, and command state. Backend process owns MQTT ingestion, REST commands, SSE fan-out, migrations, pricing, and offline detection. Frontend talks only to backend through the Nginx proxy in the frontend container.
 
 ## Frontend API Integration
 

@@ -19,6 +19,9 @@ export interface ChargingSession {
   end_meter_wh: number | null
   total_kwh: number | null
   total_cost: number | null
+  price_per_kwh: number | null
+  pricing_tariff: string | null
+  station_power_class: string | null
 }
 
 export interface MeterValue {
@@ -39,7 +42,15 @@ export interface StopResponse {
   status: string
 }
 
-export interface SSEEvent {
-  type: string
-  data: unknown
+export interface StationCommand {
+  id: string
+  station_id: string
+  command: string
+  transaction_id: string | null
+  status: "queued" | "sent" | "acked" | "failed"
+  error_message: string | null
+  queued_at: string
+  sent_at: string | null
+  acked_at: string | null
+  updated_at: string
 }

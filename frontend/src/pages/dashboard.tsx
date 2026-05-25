@@ -1,12 +1,15 @@
 import { useState, useMemo, lazy, Suspense } from "react"
 import { format } from "date-fns"
+import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useStations } from "@/hooks/use-stations"
-import type { Station } from "@/types"
+import type { Station, ChargingSession } from "@/types"
+import { api } from "@/lib/api"
 import { statusVariant, statusLabel, statusDotColor } from "@/lib/status"
+import ChargingHeatmap from "@/components/charging-heatmap"
 import {
   Zap,
   Activity,
@@ -18,10 +21,27 @@ import {
 
 const StationDetail = lazy(() => import("@/components/station-detail"))
 
+function useAllSessions(stationIds: string[]) {
+  return useQuery<ChargingSession[]>({
+    queryKey: ["all-sessions", stationIds],
+    queryFn: async () => {
+      const results = await Promise.all(
+        stationIds.map((id) => api.getSessions(id, 200))
+      )
+      return results.flat()
+    },
+    enabled: stationIds.length > 0,
+    staleTime: 30000,
+  })
+}
+
 export default function Dashboard() {
-  const { stations, isLoading, refresh } = useStations()
-  const [selectedStation, setSelectedStation] = useState<Station | null>(null)
+  const { stations, isLoading, error, refresh } = useStations()
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+
+  const stationIds = useMemo(() => stations.map((s) => s.id), [stations])
+  const { data: allSessions = [], isLoading: sessionsLoading } = useAllSessions(stationIds)
 
   const stats = useMemo(() => {
     const total = stations.length
@@ -34,8 +54,13 @@ export default function Dashboard() {
     return { total, charging, available, faulted, offline, totalPower, totalEnergy }
   }, [stations])
 
+  const selectedStation = useMemo(
+    () => stations.find((station) => station.id === selectedStationId) ?? null,
+    [selectedStationId, stations]
+  )
+
   const openDetail = (station: Station) => {
-    setSelectedStation(station)
+    setSelectedStationId(station.id)
     setDetailOpen(true)
   }
 
@@ -56,6 +81,12 @@ export default function Dashboard() {
           Refresh
         </Button>
       </div>
+
+      {error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          API connection issue: {error}
+        </div>
+      )}
 
       {/* Stats Bar */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -105,6 +136,18 @@ export default function Dashboard() {
           ))}
         </div>
       )}
+
+      {/* Charging Activity Heatmap */}
+      <div className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight text-[#102472]">
+          Analytics
+        </h2>
+        {sessionsLoading ? (
+          <Skeleton className="h-[260px] w-full rounded-xl" />
+        ) : (
+          <ChargingHeatmap sessions={allSessions} />
+        )}
+      </div>
 
       <Suspense fallback={null}>
         <StationDetail
