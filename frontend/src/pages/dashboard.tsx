@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react"
+import { useState, useMemo, lazy, Suspense } from "react"
 import { format } from "date-fns"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useStations } from "@/hooks/use-stations"
 import type { Station } from "@/types"
 import { statusVariant, statusLabel, statusDotColor } from "@/lib/status"
-import StationDetail from "@/components/station-detail"
 import {
   Zap,
   Activity,
@@ -16,6 +15,8 @@ import {
   ArrowRight,
   RefreshCw,
 } from "lucide-react"
+
+const StationDetail = lazy(() => import("@/components/station-detail"))
 
 export default function Dashboard() {
   const { stations, isLoading, refresh } = useStations()
@@ -105,11 +106,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      <StationDetail
-        station={selectedStation}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-      />
+      <Suspense fallback={null}>
+        <StationDetail
+          station={selectedStation}
+          open={detailOpen}
+          onOpenChange={setDetailOpen}
+        />
+      </Suspense>
     </div>
   )
 }
