@@ -131,7 +131,7 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 | Offline does not close open charging sessions — `MarkOffline` clears `active_transaction_id` but does not end session rows | Fixed |
 | Available/Finishing/Faulted status could leave stale `current_power_kw` after stop | Fixed |
 | No end-to-end MQTT/HTTP integration tests | Low (bonus) |
-| No command retry worker for stuck `queued`/`sent` commands | Low (noted in DESIGN.md) |
+| Command retry worker for stuck `sent` commands | **Fixed** — 20 s ticker, 15 s threshold, max 3 retries |
 | REST start returns 404 until station exists in DB (first telemetry) | Low — document in README |
 | `InsertMeterValue` forces status `Charging` on any meter message | Low edge case |
 
@@ -193,7 +193,7 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 | Advanced analytics dashboard | No (basic fleet stats only) |
 | Unit / integration tests | Partial (pricing + optional DB integration) |
 | JWT authentication | No |
-| Command queue / rate limiting | Outbox yes; retry worker no |
+| Command queue / rate limiting | Outbox yes; retry worker **yes** (20 s / 15 s / 3 retries) |
 | Peak/off-peak pricing | **Yes** |
 | Grafana / Prometheus | Prometheus `/metrics` only |
 | Compose healthchecks | DB yes; backend image HEALTHCHECK not wired in compose |

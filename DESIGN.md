@@ -26,9 +26,9 @@
 
 **State v DB, ne v Redis** — jednodušší, po restartu nic nezmizí. Nevýhoda je víc DB zápisů, ale u 5 stanic je to jedno.
 
-**Command outbox** — REST start/stop uloží řádek do `station_commands` (queued → sent → acked/failed). Je to robustnější než "fire and forget" MQTT publish. Chybí retry worker — kdyby se MQTT broker restartoval uprostřed session, visící commandy zůstanou ve stavu `sent`.
+**Command outbox** — REST start/stop uloží řádek do `station_commands` (queued → sent → acked/failed). Je to robustnější než "fire and forget" MQTT publish. Retry worker každých 20 s projíždí commandy ve stavu `sent` starší než 15 s a znovu je publikuje (max 3 retry), aby se zabránilo zaseknutí při výpadku MQTT brokeru nebo ztrátě ACK.
 
-**JWT autentizace** — základní login (`admin/admin`) s Bearer tokenem. Všechny API endpointy kromě `/api/login` a `/api/events` jsou chráněné middlewarem. Token se ukládá v localStorage a posílá se v hlavičce Authorization. Pro demo je to dostačující — ve skutečnosti bych použil Better Auth nebo OAuth2.
+**JWT autentizace** — základní login (`admin/admin`) s Bearer tokenem. Všechny API endpointy kromě `/api/login` a `/api/events` jsou chráněné middlewarem. Token se ukládá v localStorage a posílá se v hlavičce Authorization. Pro demo je to dostačující — ve skutečnosti bych použil Better Auth nebo Neon AUTH.
 
 **Station-5 chaos mód** — pátá stanice běží s `AUTO_CYCLE=true` a autonomně generuje stavy `Available → Preparing → Charging → Finishing → Available`, případně `Faulted` s automatickou obnovou. To dává živou demo zkušenost bez nutnosti manuálně klikat Start/Stop.
 
@@ -58,7 +58,7 @@
 
 ## Čas
 
-Celkem **4 hodiny 29 minut**.
+Celkem **6 hodin 45 minut**.
 
 | Co | Čas |
 |---|---|

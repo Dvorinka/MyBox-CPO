@@ -1,0 +1,2 @@
+ALTER TABLE station_commands
+    ADD COLUMN IF NOT EXISTS retry_count INT NOT NULL DEFAULT 0;

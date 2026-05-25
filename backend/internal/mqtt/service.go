@@ -259,6 +259,44 @@ func (s *Service) maxPowerKW(ctx context.Context, stationID string, fromPayload 
 	return station.MaxPowerKW
 }
 
+func (s *Service) RetryStaleCommands(ctx context.Context, threshold time.Duration, maxRetries int) error {
+	if s.client == nil || !s.client.IsConnected() {
+		return nil
+	}
+	commands, err := s.store.ListStaleSentCommands(ctx, threshold, maxRetries)
+	if err != nil {
+		return err
+	}
+	for _, cmd := range commands {
+		msg := commandMessage{CommandID: cmd.ID, Timestamp: time.Now().UTC()}
+		if cmd.TransactionID != nil {
+			msg.TransactionID = *cmd.TransactionID
+		}
+		if err := s.publishCommand(ctx, cmd.StationID, cmd.Command, msg); err != nil {
+			s.logger.Warn("command retry publish failed",
+				zap.String("command_id", cmd.ID),
+				zap.Int("retry", cmd.RetryCount+1),
+				zap.Error(err))
+			if cmd.RetryCount+1 >= maxRetries {
+				failed, markErr := s.store.MarkCommandFailed(ctx, cmd.ID, err)
+				if markErr != nil {
+					s.logger.Error("mark retry-failed command failed", zap.Error(markErr))
+				} else {
+					s.hub.Broadcast("command_update", failed)
+				}
+			}
+			continue
+		}
+		updated, err := s.store.BumpCommandRetry(ctx, cmd.ID)
+		if err != nil {
+			s.logger.Error("bump command retry failed", zap.String("command_id", cmd.ID), zap.Error(err))
+			continue
+		}
+		s.hub.Broadcast("command_update", updated)
+	}
+	return nil
+}
+
 func (s *Service) handleMeter(ctx context.Context, stationID string, payload stationMessage) {
 	value := db.MeterValue{
 		StationID:     stationID,

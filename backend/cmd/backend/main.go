@@ -51,6 +51,7 @@ func main() {
 
 	// Offline detection stays in-process so the demo needs no extra worker service.
 	go runOfflineDetector(ctx, cfg, store, hub, logger)
+	go runCommandRetryWorker(ctx, mqttService, logger)
 
 	router := httpapi.NewRouter(cfg, store, mqttService, hub, logger)
 	server := &http.Server{
@@ -121,6 +122,27 @@ func runOfflineDetector(ctx context.Context, cfg config.Config, store *db.Store,
 				}
 				hub.Broadcast("station_update", station)
 			}
+		}
+	}
+}
+
+func runCommandRetryWorker(ctx context.Context, mqtt *mqttsvc.Service, logger *zap.Logger) {
+	ticker := time.NewTicker(20 * time.Second)
+	defer ticker.Stop()
+
+	const staleThreshold = 15 * time.Second
+	const maxRetries = 3
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			retryCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			if err := mqtt.RetryStaleCommands(retryCtx, staleThreshold, maxRetries); err != nil {
+				logger.Error("command retry sweep failed", zap.Error(err))
+			}
+			cancel()
 		}
 	}
 }

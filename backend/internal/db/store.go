@@ -63,6 +63,7 @@ type StationCommand struct {
 	QueuedAt      time.Time  `json:"queued_at"`
 	SentAt        *time.Time `json:"sent_at,omitempty"`
 	AckedAt       *time.Time `json:"acked_at,omitempty"`
+	RetryCount    int        `json:"retry_count"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
@@ -311,7 +312,7 @@ func (s *Store) CreateCommand(ctx context.Context, stationID, command string, tr
 	row := s.pool.QueryRow(ctx, `
 		INSERT INTO station_commands (station_id, command, transaction_id)
 		VALUES ($1, $2, $3)
-		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
 	`, stationID, command, transactionID)
 	return scanCommand(row)
 }
@@ -325,7 +326,7 @@ func (s *Store) MarkCommandSent(ctx context.Context, commandID string) (StationC
 			error_message = NULL,
 			updated_at = now()
 		WHERE id = $1
-		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
 	`, commandID)
 	return scanCommand(row)
 }
@@ -342,7 +343,7 @@ func (s *Store) MarkCommandFailed(ctx context.Context, commandID string, publish
 			error_message = $2,
 			updated_at = now()
 		WHERE id = $1
-		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
 	`, commandID, errText)
 	return scanCommand(row)
 }
@@ -359,7 +360,7 @@ func (s *Store) AckCommand(ctx context.Context, commandID, status, reason string
 			acked_at = now(),
 			updated_at = now()
 		WHERE id = $1
-		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, updated_at
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
 	`, commandID, status, reason)
 	return scanCommand(row)
 }
@@ -430,6 +431,46 @@ func scanStation(row pgx.Row) (Station, error) {
 	return station, err
 }
 
+func (s *Store) ListStaleSentCommands(ctx context.Context, threshold time.Duration, maxRetries int) ([]StationCommand, error) {
+	defer metrics.ObserveDBWrite("list_stale_commands", time.Now())
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
+		FROM station_commands
+		WHERE status = 'sent'
+			AND retry_count < $1
+			AND sent_at < now() - ($2 * interval '1 second')
+		ORDER BY sent_at ASC
+		LIMIT 100
+	`, maxRetries, threshold.Seconds())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	commands := make([]StationCommand, 0)
+	for rows.Next() {
+		cmd, err := scanCommand(rows)
+		if err != nil {
+			return nil, err
+		}
+		commands = append(commands, cmd)
+	}
+	return commands, rows.Err()
+}
+
+func (s *Store) BumpCommandRetry(ctx context.Context, commandID string) (StationCommand, error) {
+	defer metrics.ObserveDBWrite("bump_command_retry", time.Now())
+	row := s.pool.QueryRow(ctx, `
+		UPDATE station_commands
+		SET retry_count = retry_count + 1,
+			sent_at = now(),
+			updated_at = now()
+		WHERE id = $1
+		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
+	`, commandID)
+	return scanCommand(row)
+}
+
 func scanCommand(row pgx.Row) (StationCommand, error) {
 	var command StationCommand
 	err := row.Scan(
@@ -442,6 +483,7 @@ func scanCommand(row pgx.Row) (StationCommand, error) {
 		&command.QueuedAt,
 		&command.SentAt,
 		&command.AckedAt,
+		&command.RetryCount,
 		&command.UpdatedAt,
 	)
 	return command, err

@@ -52,5 +52,6 @@ export interface StationCommand {
   queued_at: string
   sent_at: string | null
   acked_at: string | null
+  retry_count: number
   updated_at: string
 }

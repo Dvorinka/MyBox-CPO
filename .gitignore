@@ -34,3 +34,4 @@ build/
 
 .playwright-cli/
 .desloppify/
+../desloppify/
