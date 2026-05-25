@@ -155,6 +155,10 @@ func (s *Store) UpsertStatus(ctx context.Context, stationID string, maxPowerKW f
 			max_power_kw = GREATEST(stations.max_power_kw, EXCLUDED.max_power_kw),
 			status = EXCLUDED.status,
 			last_seen_at = EXCLUDED.last_seen_at,
+			current_power_kw = CASE
+				WHEN EXCLUDED.status IN ('Available', 'Finishing', 'Faulted', 'Offline') THEN 0
+				ELSE stations.current_power_kw
+			END,
 			current_meter_wh = GREATEST(stations.current_meter_wh, EXCLUDED.current_meter_wh),
 			active_transaction_id = EXCLUDED.active_transaction_id,
 			updated_at = now()

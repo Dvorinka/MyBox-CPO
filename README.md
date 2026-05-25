@@ -105,7 +105,7 @@ Command handling:
 - REST start/stop creates a durable command row with `queued` status.
 - Successful MQTT publish moves it to `sent`.
 - Simulator command acknowledgement moves it to `acked` or `failed`.
-- SSE emits `command_update` events for frontend toasts/status.
+- SSE emits `command_update` events for live frontend cache refresh and command status.
 
 Pricing:
 

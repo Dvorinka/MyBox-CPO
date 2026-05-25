@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { format } from "date-fns"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -6,7 +6,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
   Area,
   AreaChart,
 } from "recharts"
@@ -38,20 +37,44 @@ interface StationDetailProps {
 export default function StationDetail({ station, open, onOpenChange }: StationDetailProps) {
   const { startCharging, stopCharging } = useStations()
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | null>(null)
+  const [chartReadyFor, setChartReadyFor] = useState<string | null>(null)
+  const [chartWidth, setChartWidth] = useState(0)
+  const chartContainerRef = useRef<HTMLDivElement | null>(null)
+  const stationID = station?.id ?? null
 
   const { data: meterValues = [], isLoading: loadingChart } = useQuery<MeterValue[]>({
-    queryKey: ["meter-values", station?.id],
-    queryFn: () => api.getMeterValues(station!.id, 30, 1000),
-    enabled: open && !!station,
+    queryKey: ["meter-values", stationID],
+    queryFn: () => api.getMeterValues(stationID!, 30, 1000),
+    enabled: open && !!stationID,
     staleTime: 10000,
   })
 
   const { data: sessions = [], isLoading: loadingSessions } = useQuery<ChargingSession[]>({
-    queryKey: ["sessions", station?.id],
-    queryFn: () => api.getSessions(station!.id, 100),
-    enabled: open && !!station,
+    queryKey: ["sessions", stationID],
+    queryFn: () => api.getSessions(stationID!, 100),
+    enabled: open && !!stationID,
     staleTime: 10000,
   })
+
+  const chartReady = open && chartReadyFor === stationID
+
+  useEffect(() => {
+    if (!open || !stationID) return
+    // Recharts measures the dialog before Radix finishes layout; delay chart mount one frame.
+    const timer = window.setTimeout(() => setChartReadyFor(stationID), 100)
+    return () => window.clearTimeout(timer)
+  }, [open, stationID])
+
+  useEffect(() => {
+    if (!open || !chartReady) return
+    const element = chartContainerRef.current
+    if (!element) return
+    const updateWidth = () => setChartWidth(Math.max(0, Math.floor(element.getBoundingClientRect().width)))
+    updateWidth()
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [open, chartReady])
 
   const handleStart = async () => {
     if (!station) return
@@ -136,16 +159,21 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                   <h4 className="mb-3 text-sm font-medium text-muted-foreground">
                     Power and energy history (last 30 min)
                   </h4>
-                  {loadingChart ? (
+                  {loadingChart || !chartReady ? (
                     <Skeleton className="h-[240px] w-full rounded-lg" />
                   ) : chartData.length === 0 ? (
                     <div className="flex h-[240px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
                       No meter data available
                     </div>
                   ) : (
-                    <div className="h-[240px] w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={chartData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                    <div ref={chartContainerRef} className="h-[240px] w-full">
+                      {chartWidth > 0 ? (
+                        <AreaChart
+                          width={chartWidth}
+                          height={240}
+                          data={chartData}
+                          margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
+                        >
                           <defs>
                             <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor="#2596be" stopOpacity={0.2} />
@@ -215,7 +243,9 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                             animationEasing="ease-out"
                           />
                         </AreaChart>
-                      </ResponsiveContainer>
+                      ) : (
+                        <Skeleton className="h-[240px] w-full rounded-lg" />
+                      )}
                     </div>
                   )}
                 </div>

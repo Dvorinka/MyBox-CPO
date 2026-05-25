@@ -56,7 +56,8 @@ Backend má retry na DB/MQTT connect, MQTT auto-reconnect, idempotentní migrati
 - MQTT broker restart uprostřed session neztratí DB state ani command record, ale aktuálně chybí automatický retry worker pro visící příkazy.
 - Pokud se připojí dvě stanice se stejným ID, poslední publisher vyhrává. Produkčně by musel existovat station identity/auth layer.
 - Clock drift ze stanic by mohl zkreslit grafy; backend teď důvěřuje timestampu z payloadu.
-- Docker smoke na tomto stroji narazil na lokální Docker Desktop/buildx snapshot chybu, takže runtime ověření přes compose je potřeba zopakovat po restartu Dockeru; Go build/test část je validovaná.
+- Full compose smoke byl ověřený přes funkční `default` Docker context: build všech image prošel, běží Mosquitto, Postgres, backend, frontend a 5 simulátorů. Desktop Docker context na tomto stroji visel v buildx, proto jsem test pustil přes `docker --context default compose up --build -d`.
+- API smoke ověřil health, seznam 5 stanic, start/stop session, meter values, výpočet ceny, SSE eventy `station_update`, `meter_value`, `command_update` a UI detail dialog bez console errors/warnings.
 
 ## Čas
 

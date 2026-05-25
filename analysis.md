@@ -129,6 +129,7 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 |-------|----------|
 | Docker Go version mismatch | Fixed |
 | Offline does not close open charging sessions — `MarkOffline` clears `active_transaction_id` but does not end session rows | Fixed |
+| Available/Finishing/Faulted status could leave stale `current_power_kw` after stop | Fixed |
 | No end-to-end MQTT/HTTP integration tests | Low (bonus) |
 | No command retry worker for stuck `queued`/`sent` commands | Low (noted in DESIGN.md) |
 | REST start returns 404 until station exists in DB (first telemetry) | Low — document in README |
@@ -179,7 +180,7 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 | `docker compose up --build` OOTB | Fixed at Dockerfile level; smoke test still recommended |
 | README accuracy | Fixed |
 | README Architecture section | Present |
-| Full compose smoke test documented | Not verified (DESIGN.md notes local Docker issues) |
+| Full compose smoke test documented | Verified and recorded in DESIGN.md |
 | Backend HEALTHCHECK in Dockerfile | Present but not used in compose `depends_on` for frontend |
 
 ---
@@ -209,9 +210,8 @@ TASK requires a live dashboard **without F5**. SSE is wired incorrectly.
 
 ### P1 — strong polish
 
-4. Run full `docker compose up` smoke test; record result in DESIGN.md.
-5. Add command ack toast/status feedback.
-6. Add compose-level smoke test.
+4. Add command ack toast/status feedback.
+5. Add compose-level smoke test script.
 
 ### P2 — nice to have
 
