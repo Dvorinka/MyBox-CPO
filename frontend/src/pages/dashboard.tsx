@@ -114,39 +114,49 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Station Cards */}
-      {isLoading ? (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-[200px] rounded-xl" />
-          ))}
+      {/* Main content: station cards + heatmap sidebar */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Station cards — take up 2/3 on desktop */}
+        <div className="lg:col-span-2">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Stations
+          </h2>
+          {isLoading ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-[180px] rounded-xl" />
+              ))}
+            </div>
+          ) : stations.length === 0 ? (
+            <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed">
+              <p className="text-sm text-muted-foreground">No stations connected</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {stations.map((station) => (
+                <StationCard
+                  key={station.id}
+                  station={station}
+                  onClick={() => openDetail(station)}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      ) : stations.length === 0 ? (
-        <div className="flex h-[300px] items-center justify-center rounded-xl border border-dashed">
-          <p className="text-sm text-muted-foreground">No stations connected</p>
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {stations.map((station) => (
-            <StationCard
-              key={station.id}
-              station={station}
-              onClick={() => openDetail(station)}
-            />
-          ))}
-        </div>
-      )}
 
-      {/* Charging Activity Heatmap */}
-      <div className="space-y-3">
-        <h2 className="text-lg font-semibold tracking-tight text-[#102472]">
-          Analytics
-        </h2>
-        {sessionsLoading ? (
-          <Skeleton className="h-[260px] w-full rounded-xl" />
-        ) : (
-          <ChargingHeatmap sessions={allSessions} />
-        )}
+        {/* Heatmap sidebar — 1/3 on desktop */}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Charging Activity
+          </h2>
+          {sessionsLoading ? (
+            <Skeleton className="h-[180px] w-full rounded-xl" />
+          ) : (
+            <div className="rounded-xl border p-4">
+              <ChargingHeatmap sessions={allSessions} />
+            </div>
+          )}
+        </div>
       </div>
 
       <Suspense fallback={null}>

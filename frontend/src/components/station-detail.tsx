@@ -308,7 +308,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                                 : "—"}
                             </TableCell>
                             <TableCell className="text-xs">
-                              {s.total_kwh !== null ? `${s.total_kwh.toFixed(2)} kWh` : "—"}
+                              {typeof s.total_kwh === "number" ? `${s.total_kwh.toFixed(2)} kWh` : "—"}
                             </TableCell>
                             <TableCell className="text-xs">
                               {s.end_time
@@ -321,7 +321,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                               {s.pricing_tariff ?? "—"}
                             </TableCell>
                             <TableCell className="text-right text-xs font-medium">
-                              {s.total_cost !== null ? `${s.total_cost.toFixed(2)} CZK` : "—"}
+                              {typeof s.total_cost === "number" ? `${s.total_cost.toFixed(2)} CZK` : "—"}
                             </TableCell>
                           </TableRow>
                         ))}
