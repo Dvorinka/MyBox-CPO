@@ -23,7 +23,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import type { Station, MeterValue, ChargingSession } from "@/types"
 import { api } from "@/lib/api"
-import { statusVariant, statusLabel } from "@/lib/status"
+import { statusVariant } from "@/lib/status"
+import { useI18n } from "@/lib/i18n"
 import { Power, Battery, CreditCard, Play, Square } from "lucide-react"
 import { useStations } from "@/hooks/use-stations"
 import { cn } from "@/lib/utils"
@@ -35,6 +36,7 @@ interface StationDetailProps {
 }
 
 export default function StationDetail({ station, open, onOpenChange }: StationDetailProps) {
+  const { t } = useI18n()
   const { startCharging, stopCharging } = useStations()
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | null>(null)
   const [chartReadyFor, setChartReadyFor] = useState<string | null>(null)
@@ -60,7 +62,6 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
 
   useEffect(() => {
     if (!open || !stationID) return
-    // Recharts measures the dialog before Radix finishes layout; delay chart mount one frame.
     const timer = window.setTimeout(() => setChartReadyFor(stationID), 100)
     return () => window.clearTimeout(timer)
   }, [open, stationID])
@@ -116,21 +117,22 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                   {station.id}
                 </DialogTitle>
                 <Badge variant={statusVariant(station.status)}>
-                  {statusLabel(station.status)}
+                  {t(`status${station.status}` as Parameters<typeof t>[0])}
                 </Badge>
               </div>
               <DialogDescription>
-                Max power: {station.max_power_kw} kW &middot; Last seen: {" "}
-                {station.last_seen_at
-                  ? format(new Date(station.last_seen_at), "HH:mm:ss")
-                  : "Never"}
+                {t("max")}: {station.max_power_kw} kW &middot; {t("updatedAt", {
+                  time: station.last_seen_at
+                    ? format(new Date(station.last_seen_at), "HH:mm:ss")
+                    : t("neverSeen")
+                })}
               </DialogDescription>
             </DialogHeader>
 
             <Tabs defaultValue="overview" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="sessions">Sessions</TabsTrigger>
+                <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
+                <TabsTrigger value="sessions">{t("sessions")}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="overview" className="space-y-6 pt-4">
@@ -138,18 +140,18 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                 <div className="grid grid-cols-3 gap-4">
                   <MetricCard
                     icon={<Power className="h-4 w-4 text-[#2596be]" />}
-                    label="Current Power"
+                    label={t("currentPower")}
                     value={`${station.current_power_kw.toFixed(2)} kW`}
                   />
                   <MetricCard
                     icon={<Battery className="h-4 w-4 text-[#2596be]" />}
-                    label="Total Energy"
+                    label={t("totalEnergy")}
                     value={`${(station.current_meter_wh / 1000).toFixed(2)} kWh`}
                   />
                   <MetricCard
                     icon={<CreditCard className="h-4 w-4 text-[#2596be]" />}
-                    label="Active Transaction"
-                    value={station.active_transaction_id ?? "None"}
+                    label={t("activeTransaction")}
+                    value={station.active_transaction_id ?? t("none")}
                     small
                   />
                 </div>
@@ -157,13 +159,13 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                 {/* Chart */}
                 <div>
                   <h4 className="mb-3 text-sm font-medium text-muted-foreground">
-                    Power and energy history (last 30 min)
+                    {t("powerHistory")}
                   </h4>
                   {loadingChart || !chartReady ? (
                     <Skeleton className="h-[240px] w-full rounded-lg" />
                   ) : chartData.length === 0 ? (
                     <div className="flex h-[240px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-                      No meter data available
+                      {t("noMeterDataAvailable")}
                     </div>
                   ) : (
                     <div ref={chartContainerRef} className="h-[240px] w-full">
@@ -258,7 +260,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                     className="flex-1 bg-[#102472] hover:bg-[#102472]/90"
                   >
                     <Play className="mr-2 h-4 w-4" />
-                    {actionLoading === "start" ? "Starting..." : "Start Charging"}
+                    {actionLoading === "start" ? t("starting") : t("startCharging")}
                   </Button>
                   <Button
                     onClick={handleStop}
@@ -267,7 +269,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                     className="flex-1"
                   >
                     <Square className="mr-2 h-4 w-4" />
-                    {actionLoading === "stop" ? "Stopping..." : "Stop Charging"}
+                    {actionLoading === "stop" ? t("stopping") : t("stopCharging")}
                   </Button>
                 </div>
               </TabsContent>
@@ -281,19 +283,19 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                   </div>
                 ) : sessions.length === 0 ? (
                   <div className="flex h-[200px] items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground">
-                    No charging sessions recorded
+                    {t("noChargingSessionsRecorded")}
                   </div>
                 ) : (
                   <div className="rounded-lg border">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Start Time</TableHead>
-                          <TableHead>End Time</TableHead>
-                          <TableHead>Energy</TableHead>
-                          <TableHead>Duration</TableHead>
-                          <TableHead>Tariff</TableHead>
-                          <TableHead className="text-right">Cost</TableHead>
+                          <TableHead>{t("startTime")}</TableHead>
+                          <TableHead>{t("endTime")}</TableHead>
+                          <TableHead>{t("energy")}</TableHead>
+                          <TableHead>{t("duration")}</TableHead>
+                          <TableHead>{t("tariff")}</TableHead>
+                          <TableHead className="text-right">{t("cost")}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -315,7 +317,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                                 ? formatDuration(
                                     new Date(s.end_time).getTime() - new Date(s.start_time).getTime()
                                   )
-                                : "In progress"}
+                                : t("inProgress")}
                             </TableCell>
                             <TableCell className="text-xs">
                               {s.pricing_tariff ?? "—"}

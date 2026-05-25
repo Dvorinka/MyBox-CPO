@@ -1,7 +1,11 @@
 import { Zap } from "lucide-react"
 import { Link } from "react-router-dom"
+import { useI18n } from "@/lib/i18n"
+import LanguageSwitcher from "@/components/language-switcher"
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n()
+
   return (
     <div className="min-h-[100dvh] bg-background font-sans text-foreground">
       <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-white/80 backdrop-blur-md">
@@ -11,13 +15,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Zap className="h-4 w-4 text-white" />
             </div>
             <span className="text-lg font-semibold tracking-tight text-[#102472]">
-              MyBox CPO
+              {t("appTitle")}
             </span>
           </Link>
-          <div className="ml-auto flex items-center gap-4 text-sm font-medium text-muted-foreground">
-            <span className="hidden sm:inline">Fleet Dashboard</span>
-            <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-xs text-emerald-600">Live</span>
+          <div className="ml-auto flex items-center gap-3 text-sm font-medium text-muted-foreground">
+            <span className="hidden sm:inline">{t("fleetDashboard")}</span>
+            <div className="h-2 w-2 rounded-full bg-[#2596be] animate-pulse" />
+            <span className="text-xs text-[#2596be]">{t("live")}</span>
+            <LanguageSwitcher />
           </div>
         </div>
       </header>
@@ -25,7 +30,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
       <footer className="mx-auto max-w-[1400px] px-4 py-6 text-center text-xs text-muted-foreground md:px-8">
-        MyBox CPO Platform &middot; Mini fleet management demo
+        {t("footer")}
       </footer>
     </div>
   )

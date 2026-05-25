@@ -19,27 +19,10 @@ export function statusVariant(status: Station["status"]) {
   }
 }
 
-export function statusLabel(status: Station["status"]) {
-  switch (status) {
-    case "Available":
-      return "Available"
-    case "Preparing":
-      return "Preparing"
-    case "Charging":
-      return "Charging"
-    case "Finishing":
-      return "Finishing"
-    case "Faulted":
-      return "Faulted"
-    case "Offline":
-      return "Offline"
-  }
-}
-
 export function statusDotColor(status: Station["status"]) {
   switch (status) {
     case "Available":
-      return "bg-emerald-500"
+      return "bg-[#2596be]"
     case "Preparing":
       return "bg-amber-500"
     case "Charging":
