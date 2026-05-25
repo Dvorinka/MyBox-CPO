@@ -1,6 +1,15 @@
 import type { Station, ChargingSession, MeterValue, StartResponse, StopResponse } from "@/types"
 
 const API_BASE = "/api"
+const TOKEN_KEY = "mybox_token"
+
+function getAuthHeaders(): Record<string, string> {
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token) {
+    return { Authorization: `Bearer ${token}` }
+  }
+  return {}
+}
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
@@ -12,23 +21,48 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
+  login: async (username: string, password: string): Promise<{ token: string; type: string }> => {
+    const res = await fetch(`${API_BASE}/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    })
+    const data = await handleResponse<{ token: string; type: string }>(res)
+    localStorage.setItem(TOKEN_KEY, data.token)
+    return data
+  },
+
+  logout: () => {
+    localStorage.removeItem(TOKEN_KEY)
+  },
+
+  isAuthenticated: () => !!localStorage.getItem(TOKEN_KEY),
+
   getStations: (): Promise<Station[]> =>
-    fetch(`${API_BASE}/stations`).then((r) => handleResponse<Station[]>(r)),
+    fetch(`${API_BASE}/stations`, { headers: getAuthHeaders() }).then((r) => handleResponse<Station[]>(r)),
 
   getStation: (id: string): Promise<Station> =>
-    fetch(`${API_BASE}/stations/${id}`).then((r) => handleResponse<Station>(r)),
+    fetch(`${API_BASE}/stations/${id}`, { headers: getAuthHeaders() }).then((r) => handleResponse<Station>(r)),
 
   getSessions: (id: string, limit = 100): Promise<ChargingSession[]> =>
-    fetch(`${API_BASE}/stations/${id}/sessions?limit=${limit}`).then((r) => handleResponse<ChargingSession[]>(r)),
+    fetch(`${API_BASE}/stations/${id}/sessions?limit=${limit}`, { headers: getAuthHeaders() }).then((r) =>
+      handleResponse<ChargingSession[]>(r)
+    ),
 
   getMeterValues: (id: string, minutes = 30, limit = 1000): Promise<MeterValue[]> =>
-    fetch(`${API_BASE}/stations/${id}/meter-values?minutes=${minutes}&limit=${limit}`).then((r) => handleResponse<MeterValue[]>(r)),
+    fetch(`${API_BASE}/stations/${id}/meter-values?minutes=${minutes}&limit=${limit}`, { headers: getAuthHeaders() }).then(
+      (r) => handleResponse<MeterValue[]>(r)
+    ),
 
   startCharging: (id: string): Promise<StartResponse> =>
-    fetch(`${API_BASE}/stations/${id}/start`, { method: "POST" }).then((r) => handleResponse<StartResponse>(r)),
+    fetch(`${API_BASE}/stations/${id}/start`, { method: "POST", headers: getAuthHeaders() }).then((r) =>
+      handleResponse<StartResponse>(r)
+    ),
 
   stopCharging: (id: string): Promise<StopResponse> =>
-    fetch(`${API_BASE}/stations/${id}/stop`, { method: "POST" }).then((r) => handleResponse<StopResponse>(r)),
+    fetch(`${API_BASE}/stations/${id}/stop`, { method: "POST", headers: getAuthHeaders() }).then((r) =>
+      handleResponse<StopResponse>(r)
+    ),
 }
 
 export function subscribeEvents(onEvent: (type: string, data: unknown) => void) {

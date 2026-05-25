@@ -85,6 +85,29 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
     })
   }, [stations, sessions])
 
+  // Session duration histogram (completed sessions only)
+  const durationHistogram = useMemo(() => {
+    const buckets = [
+      { label: "0–5 min", min: 0, max: 5 * 60 },
+      { label: "5–15 min", min: 5 * 60, max: 15 * 60 },
+      { label: "15–30 min", min: 15 * 60, max: 30 * 60 },
+      { label: "30–60 min", min: 30 * 60, max: 60 * 60 },
+      { label: "60+ min", min: 60 * 60, max: Infinity },
+    ]
+    const counts = new Array(buckets.length).fill(0)
+    sessions.forEach((s) => {
+      if (!s.end_time || !s.start_time) return
+      const durationSec = (new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 1000
+      for (let i = 0; i < buckets.length; i++) {
+        if (durationSec >= buckets[i].min && durationSec < buckets[i].max) {
+          counts[i]++
+          break
+        }
+      }
+    })
+    return buckets.map((b, i) => ({ label: b.label, count: counts[i] }))
+  }, [sessions])
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
       {/* Daily Energy */}
@@ -196,6 +219,28 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
                 </div>
               </div>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Session Duration Histogram */}
+      <Card className="border-none shadow-none md:col-span-2">
+        <CardContent className="p-4">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("sessionDuration")}
+          </h3>
+          <div className="h-[180px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={durationHistogram} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
+                />
+                <Bar dataKey="count" fill="#102472" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>

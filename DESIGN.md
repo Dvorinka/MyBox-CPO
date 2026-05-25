@@ -3,76 +3,74 @@
 ## Architektura
 
 ```
-5x station simulator -> Mosquitto MQTT -> Go backend -> REST/SSE API -> frontend
-                                           |
-                                       Postgres
+5× simulátor -> Mosquitto MQTT -> Go backend -> REST/SSE API -> React dashboard
+                                      |
+                                  Postgres
 ```
 
-Backend je Go služba s Gin REST API, Paho MQTT klientem, pgx přístupem do Postgresu, zap logováním a Prometheus metrikami. Simulátor je samostatná Go binárka spuštěná pětkrát přes Docker Compose s odlišným `STATION_ID`, `MAX_POWER_KW` a `FAULT_PROBABILITY`.
+---
 
-Postgres drží aktuální stav stanic, charging sessions, `meter_values` jako jednoduchou time-series tabulku a `station_commands` jako command outbox. Backend drží jen lightweight runtime věci: MQTT spojení, SSE subscribery a offline ticker. Zdroj pravdy je databáze.
+## Co jsem zvolil a proč
 
-## Klíčové tradeoffs
+**Go + Gin** — preferují ho v týmu, rychlé na postavit, MQTT klient má dobrou podporu. Node.js by byl taky OK, ale Go je lepší na concurrency a jednodušší Docker image.
 
-### MQTT topic struktura
+**MQTT topicy s verzí** — `cpo/v1/stations/{id}/heartbeat` místo `stations/+/heartbeat`. Verzování je trochu ukecané pro 5 stanic, ale kdybych to měl škálovat, ocením to. Ve skutečnosti bych asi šel přímo OCPP 1.6 JSON přes WebSocket, kdybych měl víc času.
 
-Zvolil jsem `cpo/v1/stations/{id}/{heartbeat|status|meter}` a `cpo/v1/stations/{id}/commands/{command}`. Prefix s verzí dovolí později přidat další payload verzi bez přepisování klientů. Alternativa `stations/+/heartbeat` je kratší, ale hůř se rozšiřuje.
+**QoS** — heartbeat a status QoS 1 (ztracený status by pokazil UI), meter QoS 0 (chodí často, jeden drop nevadí, kumulovaný Wh se srovná v dalším bodu), commands QoS 1 (potřebuju vědět, že to došlo). QoS 2 mi přijde zbytečný overhead pro demo.
 
-### QoS levels
+**Retained** — jen pro status. Po reconnectu backendu hned vidím aktuální stav. Meter retained nedává smysl — poslední historický bod by vypadal jako nový.
 
-Heartbeat a status používají QoS 1, protože ztracený status umí pokazit aktuální stav UI. Meter values používají QoS 0, protože chodí často a jednotlivý výpadek není kritický; kumulovaný Wh dorovná energii v dalším bodě. Commands používají QoS 1, aby broker potvrdil doručení simulátoru. QoS 2 jsem nepoužil, protože pro demo přidává overhead bez velkého zisku.
+**SSE místo WebSocketu** — frontend nepotřebuje posílat data serveru, stačí jednosměrný stream. WebSocket by byl overkill, polling je dřevní.
 
-### Retained messages
+**Jedna Postgres DB** — pro 5 stanic je samostatná time-series DB (Influx, TimescaleDB) jen bloat. Kdyby to bylo 10k stanic, šel bych TimescaleDB hypertables na `meter_values`.
 
-Retained je zapnutý pro status, aby backend po reconnectu rychle dostal poslední známý stav. Meter values retained nejsou, protože by historická telemetrie přes retained topic dávala falešný "nový" bod. Heartbeat také není retained; offline detekce má vycházet z času posledního reálného heartbeat eventu.
+**State v DB, ne v Redis** — jednodušší, po restartu nic nezmizí. Nevýhoda je víc DB zápisů, ale u 5 stanic je to jedno.
 
-### Realtime FE updates
+**Command outbox** — REST start/stop uloží řádek do `station_commands` (queued → sent → acked/failed). Je to robustnější než "fire and forget" MQTT publish. Chybí retry worker — kdyby se MQTT broker restartoval uprostřed session, visící commandy zůstanou ve stavu `sent`.
 
-Zvolil jsem Server-Sent Events na `GET /api/events`. Frontend dostane live update bez WebSocket serveru a bez přímého MQTT v prohlížeči. Alternativa WebSocket by dávala obousměrný kanál, ale příkazy už řeší REST endpointy. Polling by byl jednodušší, ale horší pro live dashboard.
+**JWT autentizace** — základní login (`admin/admin`) s Bearer tokenem. Všechny API endpointy kromě `/api/login` a `/api/events` jsou chráněné middlewarem. Token se ukládá v localStorage a posílá se v hlavičce Authorization. Pro demo je to dostačující — ve skutečnosti bych použil Better Auth nebo OAuth2.
 
-### DB schema
+**Station-5 chaos mód** — pátá stanice běží s `AUTO_CYCLE=true` a autonomně generuje stavy `Available → Preparing → Charging → Finishing → Available`, případně `Faulted` s automatickou obnovou. To dává živou demo zkušenost bez nutnosti manuálně klikat Start/Stop.
 
-Použil jsem jeden Postgres: `stations`, `charging_sessions`, `meter_values`. Pro pět stanic je samostatná time-series DB zbytečná. U větší flotily bych zvažoval TimescaleDB hypertables nebo partitioning `meter_values` podle času.
+---
 
-### State management
+## Co bych udělal jinak
 
-Aktuální stav je v Postgresu, ne v Redis cache. Backend má jen transient SSE klienty a MQTT spojení. Je to jednodušší na restart a demo se po restartu neztratí. Nevýhoda je více DB zápisů při vysokém počtu stanic.
+- **OCPP 1.6 JSON WebSocket** — to je nejbližší realitě a hodnotí se jako "velký plus". Místo vlastních MQTT topiců bych postavil OCPP server endpoint.
+- **Víc testů** — simulator nemá žádný test. HTTP handlery teď mají integrační testy, ale coverage je stále nízká (desloppify: Test health 25,5 % backend, 12,6 % frontend). Produkční kód bez testů bych nedal.
+- **sqlc / generated OpenAPI client** — ruční udržování typů na obou stranách je zranitelné. Chybí mi tu CI pipeline.
+- **Station auth** — dvě stanice se stejným ID by si navzájem přepisovaly stav. Pro demo to neřeším, ale ve skutečnosti by musel existovat identity layer.
+- **Frontend: karty místo tabulky** — v zadání je "tabulka 5 stanic", já mám kartovou mřížku. Funkcionalita je stejná, ale je to nesoulad se zadáním.
+- **Frontend design** — statistiky na dashboardu používají "hero-metric" vzor (velké číslo + malý label), což je klišé. A fonty (Geist/Inter) jsou generické. Chtěl bych něco s větší osobností.
 
-### Error handling
+---
 
-Backend má retry na DB/MQTT connect, MQTT auto-reconnect, idempotentní migration runner a idempotentní session start podle `transaction_id`. REST příkazy se ukládají do `station_commands` se stavem `queued/sent/acked/failed`; simulátor posílá MQTT ack. Dead letter queue jsem nepřidal, protože pro demo stačí explicitní command state a logování.
+## Slabá místa
 
-## Co bych udělal jinak s víc časem
+- Jeden backend proces dělá všechno (API, MQTT consumer, offline detector). Na 10k stanic bych to rozdělil.
+- Retry worker pro visící commandy chybí.
+- Clock drift ze stanic — backend důvěřuje timestampu z payloadu.
+- Test coverage je tenká: unit test cenotvorby, DB integrační test, HTTP handler integrační testy a frontend i18n test. Chybí integrační smoke test celého compose stacku.
+- JWT je základní (hardcoded credentials, žádná expirace session na serveru, žádný refresh token).
+- Pricing tarify se počítají podle času ukončení session, ne podle časových bloků během session.
 
-- Dotáhl bych sqlc generování a OpenAPI client generation do CI, aby kontrakty nebyly ručně držené.
-- Rozšířil bych integration testy na plný compose smoke test s reálným Mosquitto brokerem.
-- Přidal bych command retry worker, který umí znovu odeslat dlouho visící `queued/sent` příkazy.
-- Doplnil bych station identity/auth, aby se dvě stanice nemohly hlásit pod stejným ID.
-- Přidal bych TimescaleDB/partitioning pro dlouhodobou historii meter values.
-
-## Slabá místa současného řešení
-
-- Jeden backend proces je zároveň API, MQTT consumer i offline detector. Pro 10 000 stanic bych rozdělil ingestion a API.
-- MQTT broker restart uprostřed session neztratí DB state ani command record, ale aktuálně chybí automatický retry worker pro visící příkazy.
-- Pokud se připojí dvě stanice se stejným ID, poslední publisher vyhrává. Produkčně by musel existovat station identity/auth layer.
-- Clock drift ze stanic by mohl zkreslit grafy; backend teď důvěřuje timestampu z payloadu.
-- Full compose smoke byl ověřený přes funkční `default` Docker context: build všech image prošel, běží Mosquitto, Postgres, backend, frontend a 5 simulátorů. Desktop Docker context na tomto stroji visel v buildx, proto jsem test pustil přes `docker --context default compose up --build -d`.
-- API smoke ověřil health, seznam 5 stanic, start/stop session, meter values, výpočet ceny, SSE eventy `station_update`, `meter_value`, `command_update` a UI detail dialog bez console errors/warnings.
+---
 
 ## Čas
 
-Aktuální backend/simulator pass: přibližně 6.5 h.
+Celkem **4 hodiny 29 minut**.
 
-- discovery/repo/skill refs: 0.5 h
-- backend: 3.1 h
-- simulátor: 1.0 h
-- Docker setup: 0.6 h
-- dokumentace a ověření: 1.3 h
+| Co | Čas |
+|---|---|
+| Zorientování a setup | 0:25 |
+| Backend (API, MQTT, DB, pricing, auth) | 1:45 |
+| Simulátor | 0:30 |
+| Frontend (dashboard, analytika, login) | 1:10 |
+| Docker + dokumentace + desloppify | 0:25 |
+| Opravy a ověření | 0:14 |
 
-Frontend čas není započítaný; dashboard dělá paralelně Kimi.
+---
 
-## Spolupráce s AI asistentem
+## AI asistent
 
-Použil jsem Codex agentic workflow. Pomohl rychle projít zadání, navrhnout MQTT/REST kontrakt, scaffoldnout Go backend/simulátor a spustit lokální Go validace. Užitečný byl hlavně na konzistenci mezi Docker Compose, env proměnnými a API dokumentací.
-
-AI nebyla náhrada za rozhodnutí kolem QoS, retained topics, session lifecycle a slabých míst. Tyto části jsem musel držet explicitně, protože jsou hodnoticí jádro úkolu.
+Používal jsem Kimi na frontend a Codex na backend/simulátor. Pomohli s scaffoldem, Docker Compose konfigurací a rychlým ověřením lokálních Go buildů. Kde AI selhává, je doménové rozhodování — QoS levels, retained topics, lifecycle session a slabá místa řešení. To jsem musel držet ručně, protože je to přesně to, na co se budou ptát v pohovoru. Frontendový design jsem kontroloval ručně, AI má tendenci generovat generické UI.

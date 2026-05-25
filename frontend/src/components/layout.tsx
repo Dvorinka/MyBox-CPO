@@ -1,9 +1,15 @@
-import { Zap } from "lucide-react"
+import { Zap, LogOut } from "lucide-react"
 import { Link } from "react-router-dom"
 import { useI18n } from "@/lib/i18n"
 import LanguageSwitcher from "@/components/language-switcher"
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout({
+  children,
+  onLogout,
+}: {
+  children: React.ReactNode
+  onLogout?: () => void
+}) {
   const { t } = useI18n()
 
   return (
@@ -23,6 +29,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="h-2 w-2 rounded-full bg-[#2596be] animate-pulse" />
             <span className="text-xs text-[#2596be]">{t("live")}</span>
             <LanguageSwitcher />
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs hover:bg-muted transition-colors"
+                title={t("logout")}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{t("logout")}</span>
+              </button>
+            )}
           </div>
         </div>
       </header>

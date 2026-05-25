@@ -79,6 +79,15 @@ const dictionary = {
     topStations: "Top 3 stations by usage",
     acVsDc: "AC vs DC charging",
     uptime: "Uptime %",
+    sessionDuration: "Session duration",
+
+    // Auth
+    login: "Login",
+    logout: "Logout",
+    username: "Username",
+    password: "Password",
+    demoCredentials: "Demo: admin / admin",
+    loginError: "Invalid credentials",
 
     // Language
     language: "Language",
@@ -147,6 +156,15 @@ const dictionary = {
     topStations: "Top 3 stanice podle využití",
     acVsDc: "AC vs DC nabíjení",
     uptime: "Dostupnost %",
+    sessionDuration: "Délka sezení",
+
+    // Auth
+    login: "Přihlášení",
+    logout: "Odhlásit",
+    username: "Uživatelské jméno",
+    password: "Heslo",
+    demoCredentials: "Demo: admin / admin",
+    loginError: "Neplatné přihlašovací údaje",
 
     // Language
     language: "Jazyk",

@@ -49,6 +49,7 @@ services:
       PEAK_END_HOUR: "21"
       OFFLINE_AFTER_SECONDS: "90"
       CORS_ALLOWED_ORIGINS: "*"
+      JWT_SECRET: "demo-secret-change-in-production"
     ports:
       - "8080:8080"
     healthcheck:
@@ -164,6 +165,7 @@ services:
       MQTT_BROKER: tcp://mosquitto:1883
       MAX_POWER_KW: "300"
       FAULT_PROBABILITY: "0.02"
+      AUTO_CYCLE: "true"
     depends_on:
       mosquitto:
         condition: service_started

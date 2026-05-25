@@ -21,6 +21,7 @@ type Config struct {
 	PeakEndHour        int
 	OfflineAfter       time.Duration
 	CORSAllowedOrigins []string
+	JWTSecret          string
 }
 
 func Load() Config {
@@ -38,6 +39,7 @@ func Load() Config {
 		PeakEndHour:        envInt("PEAK_END_HOUR", 21),
 		OfflineAfter:       time.Duration(envInt("OFFLINE_AFTER_SECONDS", 90)) * time.Second,
 		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS", "*"),
+		JWTSecret:          env("JWT_SECRET", "change-me-in-production"),
 	}
 }
 

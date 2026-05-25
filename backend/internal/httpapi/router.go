@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"mybox-cpo/backend/internal/auth"
 	"mybox-cpo/backend/internal/config"
 	"mybox-cpo/backend/internal/db"
 	"mybox-cpo/backend/internal/metrics"
@@ -31,6 +32,7 @@ type API struct {
 func NewRouter(cfg config.Config, store *db.Store, mqtt *mqttsvc.Service, hub *realtime.Hub, logger *zap.Logger) http.Handler {
 	gin.SetMode(gin.ReleaseMode)
 	api := &API{cfg: cfg, store: store, mqtt: mqtt, hub: hub, logger: logger}
+	authService := auth.NewService(cfg.JWTSecret)
 
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -38,7 +40,7 @@ func NewRouter(cfg config.Config, store *db.Store, mqtt *mqttsvc.Service, hub *r
 	router.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.CORSAllowedOrigins,
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
@@ -46,20 +48,51 @@ func NewRouter(cfg config.Config, store *db.Store, mqtt *mqttsvc.Service, hub *r
 
 	router.GET("/health", api.health)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	group := router.Group("/api")
-	group.GET("/events", api.events)
-	group.GET("/stations", api.listStations)
-	group.GET("/stations/:id", api.getStation)
-	group.GET("/stations/:id/sessions", api.listSessions)
-	group.GET("/stations/:id/meter-values", api.listMeterValues)
-	group.POST("/stations/:id/start", api.startCharging)
-	group.POST("/stations/:id/stop", api.stopCharging)
+
+	// Public API routes (no auth required for SSE and login)
+	public := router.Group("/api")
+	public.POST("/login", api.login(authService))
+	public.GET("/events", api.events)
+
+	// Protected API routes
+	protected := router.Group("/api")
+	protected.Use(authService.Middleware())
+	protected.GET("/stations", api.listStations)
+	protected.GET("/stations/:id", api.getStation)
+	protected.GET("/stations/:id/sessions", api.listSessions)
+	protected.GET("/stations/:id/meter-values", api.listMeterValues)
+	protected.POST("/stations/:id/start", api.startCharging)
+	protected.POST("/stations/:id/stop", api.stopCharging)
 
 	return router
 }
 
 func (a *API) health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "time": time.Now().UTC()})
+}
+
+func (a *API) login(authService auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			a.fail(c, http.StatusBadRequest, "invalid request body", err)
+			return
+		}
+		// Demo credentials — in production this would validate against a user store.
+		if req.Username != "admin" || req.Password != "admin" {
+			a.fail(c, http.StatusUnauthorized, "invalid credentials", nil)
+			return
+		}
+		token, err := authService.Generate(req.Username)
+		if err != nil {
+			a.fail(c, http.StatusInternalServerError, "token generation failed", err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"token": token, "type": "Bearer"})
+	}
 }
 
 func (a *API) listStations(c *gin.Context) {

@@ -1,166 +1,173 @@
-# MyBox CPO - Mini CPO Platform
+# MyBox CPO — Mini platforma pro správu flotily nabíjecích stanic
 
-A full-stack EV charging fleet management demo. The stack runs Mosquitto MQTT broker, Postgres, a Go backend, five Go station simulators, and a React + Vite + shadcn/ui frontend dashboard.
+> Jednoduchá CPO (Charge Point Operator) platforma pro monitoring 5 EV nabíjecích stanic v reálném čase. Komunikace probíhá přes MQTT, data se persistují do PostgreSQL a frontend zobrazuje live dashboard s analytikou.
 
-## Setup
+---
 
-Requirements:
+## Architektura
 
-- Docker with Compose v2
-- Free local ports: `5173`, `8080`, `1883`, `5432`
+```
++-------------+     MQTT      +-----------+   REST/SSE   +-----------+
+| 5× simulátor| ------------> |  Backend  | ----------> |  Frontend |
+|   stanice   |  heartbeat    |  (Go+Gin) |              |  (React)  |
+|  (Go+MQTT)  |  status       |           |              |           |
+|             |  meter values |  Postgres |              |           |
++-------------+               +-----------+              +-----------+
+       ^                            |
+       |                            |
+       +---------- commands <-------+
+```
 
-No local Go, Node, or Postgres install is required for the main demo. Docker builds backend, frontend, and simulator images.
+- **Simulátor** — 5 Docker služeb (Go), každá simuluje jednu stanici. Publikuje heartbeat (30 s), status změny, meter values (5 s). Subscribuje start/stop příkazy.
+- **MQTT Broker** — Mosquitto (lightweight, zero-config).
+- **Backend** — Go + Gin. Subscribuje MQTT, persistuje do Postgres, exponuje REST API + SSE pro live updates. Obsahuje command outbox, offline detekci a pricing engine.
+- **Frontend** — React 19 + Vite + shadcn/ui. Kartová mřížka stanic, detail stanice s grafem, historie sessions, analytický dashboard s heatmapou.
+- **DB** — PostgreSQL 16 (migrace při startu).
 
-## Run
+---
+
+## Spuštění
+
+### Požadavky
+
+- Docker + Docker Compose
+- (Volitelně) Go 1.25+ a Node.js 20+ pro lokální vývoj
+
+### Jedním příkazem
 
 ```bash
 docker compose up --build
 ```
 
-Services:
+Po prvním startu (cca 20–30 s na inicializaci DB a migrace) je aplikace dostupná na:
 
-- Frontend Dashboard: http://localhost:5173
-- Backend REST/SSE API: http://localhost:8080
-- Prometheus metrics: http://localhost:8080/metrics
-- MQTT broker: localhost:1883
-- Postgres: localhost:5432
+| Služba | URL |
+|--------|-----|
+| Frontend dashboard | http://localhost:5173 |
+| Backend API | http://localhost:8080 |
+| Prometheus metrics | http://localhost:8080/metrics |
+| MQTT broker | localhost:1883 |
 
-## Dashboard
+---
 
-The frontend is a React 19 SPA built with Vite, Tailwind CSS v4, and shadcn/ui components. It features:
+## Jak to vyzkoušet
 
-- **Live fleet overview** with color-coded station status cards and real-time SSE updates
-- **Station detail dialog** with power/energy metrics, interactive area chart (Recharts), and Start/Stop controls
-- **Charging session history** with duration, energy, and cost breakdown
-- **Charging activity heatmap** based on session energy by weekday and hour bucket
-- **Tesla-inspired minimal design** using the custom palette `#102472`, `#2596be`, `#ffffff`
+1. Otevři http://localhost:5173 a přihlas se (**admin / admin**).
+2. V dashboardu uvidíš 5 stanic v reálném čase (SSE updates bez F5).
+3. Klikni na **Zahájit nabíjení** u libovolné stanice — backend pošle MQTT command, simulátor přejde do stavu `Charging` a začne posílat meter values.
+4. Po chvíli klikni na **Ukončit nabíjení** — session se uzavře, vypočítá se spotřeba a cena.
+5. Otevři detail stanice pro graf výkonu a historii sessions.
 
-The dashboard auto-refreshes via Server-Sent Events (`/api/events`) so station states update without page reloads.
+### Speciální stanice-5 (chaos mód)
 
-### Local Frontend Development
+`station-5` běží v režimu `AUTO_CYCLE=true`. Autonomně startuje a ukončuje nabíjení, náhodně generuje chyby (`Faulted`) a po 15–35 s se sama zotaví zpět do `Available`. Ideální pro demonstraci fault recovery a real-time UI updates bez manuálního klikání.
+
+---
+
+## Testy
+
+### Backend
+
+```bash
+cd backend
+
+# Unit testy (cenotvorba)
+go test ./internal/pricing/...
+
+# Integrační testy (vyžadují Docker — testcontainers)
+go test -tags=integration ./internal/db/...
+go test -tags=integration ./internal/httpapi/...
+```
+
+### Frontend
 
 ```bash
 cd frontend
-npm install
-npm run dev      # local dev server
-npm run build    # production build
-npm run lint     # ESLint check
+npm test
 ```
 
-## Test API Flow
-
-Wait until the five simulators publish initial status messages, then:
+### Prometheus / liveness
 
 ```bash
+# Healthcheck
 curl http://localhost:8080/health
-curl http://localhost:8080/api/stations
-curl http://localhost:8080/api/stations/station-1
-curl -X POST http://localhost:8080/api/stations/station-1/start
-curl http://localhost:8080/api/stations/station-1/meter-values?minutes=10
-curl -X POST http://localhost:8080/api/stations/station-1/stop
-curl http://localhost:8080/api/stations/station-1/sessions
+
+# Prometheus metrics
 curl http://localhost:8080/metrics
 ```
 
-Live updates are available through Server-Sent Events:
+---
 
-```bash
-curl -N http://localhost:8080/api/events
+## Code Health Score (desloppify)
+
+| Projekt | Overall | Strict | Hlavní slabiny |
+|---------|---------|--------|----------------|
+| **Backend** | **99.1/100** | **99.1/100** | Security 88.9 % (1 finding) |
+| **Frontend** | **84.5/100** | **84.5/100** | Test health 12.4 %, 3 single-use findings |
+
+### Backend scorecard
+
+```
+File health        ███████████████ 100.0%
+AI Generated Debt  ███████████████ 100.0%
+Abstraction Fit    ███████████████ 100.0%
+Code quality       ███████████████ 100.0%
+Contracts          ███████████████ 100.0%
+Duplication        ███████████████  98.6%
+Error Consistency  ███████████████ 100.0%
+Logic Clarity      ███████████████ 100.0%
+Naming Quality     ███████████████ 100.0%
+Security           █████████████░░  88.9%
+Test health        ███████████████  97.4%
+Type Safety        ███████████████ 100.0%
 ```
 
-Expected SSE event names:
+### Frontend scorecard
 
-- `station_update` - full station snapshot after status/meter/offline changes
-- `meter_value` - latest meter sample for live charts
-- `command_update` - command state after publish or simulator acknowledgement
-
-## MQTT Contract
-
-Station telemetry topics:
-
-- `cpo/v1/stations/{stationId}/heartbeat` with QoS 1
-- `cpo/v1/stations/{stationId}/status` with QoS 1 and retained status
-- `cpo/v1/stations/{stationId}/meter` with QoS 0
-- `cpo/v1/stations/{stationId}/command_acks` with QoS 1
-
-Command topics:
-
-- `cpo/v1/stations/{stationId}/commands/start_charging`
-- `cpo/v1/stations/{stationId}/commands/stop_charging`
-
-Payloads are JSON. The REST API contract is documented in [openapi.yaml](openapi.yaml).
-
-## Backend
-
-The backend uses Go, Gin, Paho MQTT, pgx, zap, and Postgres. On startup it runs SQL migrations from `backend/migrations`, subscribes to station topics, persists station/session/meter state, and marks stations `Offline` after 90 seconds without heartbeat.
-
-Session lifecycle:
-
-- `Preparing` or `Charging` status with `transaction_id` creates the session.
-- `meter` messages append time-series power and cumulative Wh points.
-- `Available`, `Faulted`, or offline timeout closes the latest active session and computes `total_kwh`, `total_cost`, `price_per_kwh`, `pricing_tariff`, and station power class.
-
-Command handling:
-
-- REST start/stop creates a durable command row with `queued` status.
-- Successful MQTT publish moves it to `sent`.
-- Simulator command acknowledgement moves it to `acked` or `failed`.
-- SSE emits `command_update` events for live frontend cache refresh and command status.
-
-Pricing:
-
-- Peak/off-peak prices are controlled by `PEAK_PRICE_PER_KWH`, `OFFPEAK_PRICE_PER_KWH`, `PEAK_START_HOUR`, and `PEAK_END_HOUR`.
-- DC multiplier is controlled by `DC_POWER_THRESHOLD_KW` and `DC_PRICE_MULTIPLIER`.
-- Defaults keep `PRICE_PER_KWH` compatibility while showing tariff metadata in session history.
-
-Observability:
-
-- `/metrics` exposes Prometheus counters/histograms for HTTP requests, MQTT messages/reconnects, dropped SSE events, and DB write latency.
-
-## Architecture
-
-```text
-5x station simulator -> Mosquitto MQTT -> Go backend -> REST/SSE API -> React dashboard
-                                           |
-                                       Postgres
+```
+File health        ███████████████  97.0%
+AI Generated Debt  ███████████████ 100.0%
+Abstraction Fit    ███████████████ 100.0%
+Code quality       ██████████████░  96.2%
+Duplication        ██████████████░  94.3%
+Elegance           ███████████████ 100.0%
+Error Consistency  ███████████████ 100.0%
+Logic Clarity      ███████████████ 100.0%
+Naming Quality     ███████████████ 100.0%
+Security           ██████████████░  94.7%
+Test health        ██░░░░░░░░░░░░░  12.4%
+Type Safety        ███████████████ 100.0%
 ```
 
-Postgres is the source of truth for stations, sessions, meter values, and command state. Backend process owns MQTT ingestion, REST commands, SSE fan-out, migrations, pricing, and offline detection. Frontend talks only to backend through the Nginx proxy in the frontend container.
+---
 
-## Frontend API Integration
+## Environment variables
 
-The dashboard consumes the backend API via an Nginx reverse proxy (configured in `frontend/nginx.conf`):
+| Proměnná | Výchozí | Popis |
+|----------|---------|-------|
+| `HTTP_ADDR` | `:8080` | Adresa backend serveru |
+| `DATABASE_URL` | — | Postgres connection string |
+| `MQTT_BROKER` | `tcp://localhost:1883` | MQTT broker URL |
+| `PRICE_PER_KWH` | `8.50` | Základní cena za kWh |
+| `PEAK_PRICE_PER_KWH` | `8.50` | Cena v peak hodinách |
+| `OFFPEAK_PRICE_PER_KWH` | `7.20` | Cena mimo peak |
+| `PEAK_START_HOUR` | `7` | Začátek peak okna |
+| `PEAK_END_HOUR` | `21` | Konec peak okna |
+| `DC_PRICE_MULTIPLIER` | `1.15` | Příplatek pro DC stanice |
+| `DC_POWER_THRESHOLD_KW` | `50` | Hranice AC vs DC (kW) |
+| `JWT_SECRET` | `change-me` | Secret pro JWT podepisování |
+| `OFFLINE_AFTER_SECONDS` | `90` | Timeout pro offline detekci |
+| `FAULT_PROBABILITY` | `0.01` | Pravděpodobnost chyby stanice |
+| `AUTO_CYCLE` | `false` | Autonomní cycling (chaos mód) |
 
-- `GET /api/stations` - fleet overview cards
-- `GET /api/stations/:id` - station detail header
-- `GET /api/stations/:id/sessions` - session history table
-- `GET /api/stations/:id/meter-values?minutes=30` - power chart data
-- `POST /api/stations/:id/start` - start charging command
-- `POST /api/stations/:id/stop` - stop charging command
-- `GET /api/events` - Server-Sent Events for live station updates
+---
 
-## Local Backend Checks
+## Tech stack
 
-```bash
-cd backend
-go test ./...
-go vet ./...
-
-cd ../simulator
-go test ./...
-go vet ./...
-```
-
-Compile integration tests without running containers:
-
-```bash
-cd backend
-go test -run '^$' -tags=integration ./internal/db
-```
-
-Run Postgres-backed integration test when Docker is healthy:
-
-```bash
-cd backend
-go test -tags=integration ./internal/db
-```
+| Vrstva | Technologie |
+|--------|-------------|
+| Backend | Go 1.25, Gin, pgx, Paho MQTT, Zap, Prometheus |
+| Frontend | React 19, Vite, TanStack Query, Recharts, shadcn/ui |
+| DB | PostgreSQL 16 |
+| Message broker | Eclipse Mosquitto 2.0.20 |
+| Infra | Docker Compose, healthchecks |

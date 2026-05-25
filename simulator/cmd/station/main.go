@@ -24,6 +24,7 @@ type Config struct {
 	MQTTBroker       string
 	MaxPowerKW       float64
 	FaultProbability float64
+	AutoCycle        bool
 }
 
 type Station struct {
@@ -79,6 +80,11 @@ func main() {
 
 	station.publishStatus()
 	station.publishHeartbeat()
+
+	if cfg.AutoCycle {
+		go station.autoCycle(ctx)
+	}
+
 	station.run(ctx)
 }
 
@@ -88,6 +94,7 @@ func loadConfig() Config {
 		MQTTBroker:       env("MQTT_BROKER", "tcp://localhost:1883"),
 		MaxPowerKW:       envFloat("MAX_POWER_KW", 22),
 		FaultProbability: envFloat("FAULT_PROBABILITY", 0.01),
+		AutoCycle:        envBool("AUTO_CYCLE", false),
 	}
 }
 
@@ -130,6 +137,70 @@ func (s *Station) run(ctx context.Context) {
 			s.publishHeartbeat()
 		case <-meter.C:
 			s.tickCharging()
+		}
+	}
+}
+
+// autoCycle simulates autonomous station behaviour for demo/chaos mode.
+// It randomly starts charging, stops after a random duration, and recovers from faults.
+func (s *Station) autoCycle(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		// Wait before next auto-start
+		wait := time.Duration(20+rand.IntN(60)) * time.Second
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+
+		s.mu.Lock()
+		if s.status != "Available" {
+			s.mu.Unlock()
+			continue
+		}
+		s.mu.Unlock()
+
+		// Auto-start with a synthetic transaction
+		txID := fmt.Sprintf("auto-%s-%d", s.cfg.StationID, time.Now().Unix())
+		s.start(command{CommandID: "auto-start", TransactionID: txID, Timestamp: time.Now().UTC()})
+
+		// Run for a random duration, then stop or fault
+		duration := time.Duration(20+rand.IntN(70)) * time.Second
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(duration):
+		}
+
+		// During charging, force a fault with higher probability to demo recovery
+		s.mu.Lock()
+		forceFault := s.status == "Charging" && rand.Float64() < s.cfg.FaultProbability*3
+		s.mu.Unlock()
+
+		if forceFault {
+			s.mu.Lock()
+			s.status = "Faulted"
+			s.transactionID = ""
+			s.mu.Unlock()
+			s.publishStatus()
+			// Auto-recover after a delay
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Duration(15+rand.IntN(20)) * time.Second):
+			}
+			s.mu.Lock()
+			s.status = "Available"
+			s.mu.Unlock()
+			s.publishStatus()
+		} else {
+			s.stop(command{CommandID: "auto-stop", Timestamp: time.Now().UTC()})
 		}
 	}
 }
@@ -329,4 +400,12 @@ func envFloat(key string, fallback float64) float64 {
 		return fallback
 	}
 	return value
+}
+
+func envBool(key string, fallback bool) bool {
+	v := strings.ToLower(env(key, ""))
+	if v == "" {
+		return fallback
+	}
+	return v == "1" || v == "true" || v == "yes"
 }
