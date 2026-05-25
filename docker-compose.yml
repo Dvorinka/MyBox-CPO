@@ -55,7 +55,8 @@ services:
       - cpo-net
 
   frontend:
-    image: nginx:1.27-alpine
+    build:
+      context: ./frontend
     ports:
       - "5173:80"
     depends_on:

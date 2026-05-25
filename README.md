@@ -1,6 +1,6 @@
-# MyBox CPO Test - Mini CPO Platform
+# MyBox CPO - Mini CPO Platform
 
-Backend and simulator implementation for a local EV charging fleet demo. The stack runs Mosquitto, Postgres, a Go backend, five Go station simulators, and a placeholder frontend service that can be replaced by the dashboard.
+A full-stack EV charging fleet management demo. The stack runs Mosquitto MQTT broker, Postgres, a Go backend, five Go station simulators, and a React + Vite + shadcn/ui frontend dashboard.
 
 ## Run
 
@@ -10,11 +10,32 @@ docker compose up --build
 
 Services:
 
+- Frontend Dashboard: http://localhost:5173
 - Backend REST/SSE API: http://localhost:8080
 - Prometheus metrics: http://localhost:8080/metrics
-- Placeholder frontend port: http://localhost:5173
 - MQTT broker: localhost:1883
 - Postgres: localhost:5432
+
+## Dashboard
+
+The frontend is a React 19 SPA built with Vite, Tailwind CSS v4, and shadcn/ui components. It features:
+
+- **Live fleet overview** with color-coded station status cards and real-time SSE updates
+- **Station detail dialog** with power/energy metrics, interactive area chart (Recharts), and Start/Stop controls
+- **Charging session history** with duration, energy, and cost breakdown
+- **Tesla-inspired minimal design** using the custom palette `#102472`, `#2596be`, `#ffffff`
+
+The dashboard auto-refreshes via Server-Sent Events (`/api/events`) so station states update without page reloads.
+
+### Local Frontend Development
+
+```bash
+cd frontend
+npm install
+npm run dev      # local dev server
+npm run build    # production build
+npm run lint     # ESLint check
+```
 
 ## Test API Flow
 
@@ -80,19 +101,17 @@ Observability:
 
 - `/metrics` exposes Prometheus counters/histograms for HTTP requests, MQTT messages/reconnects, dropped SSE events, and DB write latency.
 
-## Frontend Wiring
+## Frontend API Integration
 
-Kimi can bind directly to:
+The dashboard consumes the backend API via an Nginx reverse proxy (configured in `frontend/nginx.conf`):
 
-- `GET /api/stations`
-- `GET /api/stations/:id`
-- `GET /api/stations/:id/sessions`
-- `GET /api/stations/:id/meter-values?minutes=30`
-- `POST /api/stations/:id/start`
-- `POST /api/stations/:id/stop`
-- `GET /api/events` for live updates
-
-The current `frontend` compose service is an nginx placeholder so `docker compose up` has a complete service graph before the dashboard lands.
+- `GET /api/stations` - fleet overview cards
+- `GET /api/stations/:id` - station detail header
+- `GET /api/stations/:id/sessions` - session history table
+- `GET /api/stations/:id/meter-values?minutes=30` - power chart data
+- `POST /api/stations/:id/start` - start charging command
+- `POST /api/stations/:id/stop` - stop charging command
+- `GET /api/events` - Server-Sent Events for live station updates
 
 ## Local Backend Checks
 

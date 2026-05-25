@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #0f172a;
+
+  --color-card: #ffffff;
+  --color-card-foreground: #0f172a;
+
+  --color-popover: #ffffff;
+  --color-popover-foreground: #0f172a;
+
+  --color-primary: #102472;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #f1f5f9;
+  --color-secondary-foreground: #0f172a;
+
+  --color-muted: #f1f5f9;
+  --color-muted-foreground: #64748b;
+
+  --color-accent: #2596be;
+  --color-accent-foreground: #ffffff;
+
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+
+  --color-border: #e2e8f0;
+  --color-input: #e2e8f0;
+  --color-ring: #2596be;
+
+  --color-chart-1: #102472;
+  --color-chart-2: #2596be;
+  --color-chart-3: #38bdf8;
+  --color-chart-4: #64748b;
+  --color-chart-5: #94a3b8;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem;
+
+  --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
