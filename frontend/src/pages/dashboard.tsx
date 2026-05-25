@@ -11,6 +11,7 @@ import type { Station, ChargingSession } from "@/types"
 import { api } from "@/lib/api"
 import { statusVariant, statusDotColor } from "@/lib/status"
 import ChargingHeatmap from "@/components/charging-heatmap"
+import Analytics from "@/components/analytics"
 import {
   Zap,
   Activity,
@@ -184,6 +185,9 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Analytics widgets */}
+      <Analytics sessions={allSessions} stations={stations} />
 
       <Suspense fallback={null}>
         <StationDetail

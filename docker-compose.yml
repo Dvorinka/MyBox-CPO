@@ -6,6 +6,11 @@ services:
     volumes:
       - ./mosquitto/config:/mosquitto/config:ro
       - mosquitto-data:/mosquitto/data
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-t", "$SYS/broker/health", "-m", ""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - cpo-net
 
@@ -46,6 +51,11 @@ services:
       CORS_ALLOWED_ORIGINS: "*"
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
       db:
         condition: service_healthy
@@ -59,6 +69,11 @@ services:
       context: ./frontend
     ports:
       - "5173:80"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     depends_on:
       backend:
         condition: service_started
@@ -76,6 +91,11 @@ services:
     depends_on:
       mosquitto:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - cpo-net
 
@@ -90,6 +110,11 @@ services:
     depends_on:
       mosquitto:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - cpo-net
 
@@ -104,6 +129,11 @@ services:
     depends_on:
       mosquitto:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - cpo-net
 
@@ -118,6 +148,11 @@ services:
     depends_on:
       mosquitto:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - cpo-net
 
@@ -132,6 +167,11 @@ services:
     depends_on:
       mosquitto:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
     networks:
       - cpo-net
 

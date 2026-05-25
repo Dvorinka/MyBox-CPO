@@ -74,6 +74,12 @@ const dictionary = {
     statusFaulted: "Faulted",
     statusOffline: "Offline",
 
+    // Analytics
+    energyLast7Days: "Energy last 7 days",
+    topStations: "Top 3 stations by usage",
+    acVsDc: "AC vs DC charging",
+    uptime: "Uptime %",
+
     // Language
     language: "Language",
     english: "English",
@@ -135,6 +141,12 @@ const dictionary = {
     statusFinishing: "Dokončování",
     statusFaulted: "Chyba",
     statusOffline: "Offline",
+
+    // Analytics
+    energyLast7Days: "Energie posledních 7 dní",
+    topStations: "Top 3 stanice podle využití",
+    acVsDc: "AC vs DC nabíjení",
+    uptime: "Dostupnost %",
 
     // Language
     language: "Jazyk",
