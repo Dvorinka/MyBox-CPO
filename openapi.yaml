@@ -1,0 +1,223 @@
+openapi: 3.0.3
+info:
+  title: Mini CPO Platform API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: Backend is healthy
+  /api/events:
+    get:
+      summary: Server-Sent Events stream for station and meter updates
+      responses:
+        "200":
+          description: SSE stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+  /api/stations:
+    get:
+      summary: List stations
+      responses:
+        "200":
+          description: Current fleet state
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Station"
+  /api/stations/{id}:
+    get:
+      summary: Get station detail
+      parameters:
+        - $ref: "#/components/parameters/StationID"
+      responses:
+        "200":
+          description: Station detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Station"
+        "404":
+          description: Station not found
+  /api/stations/{id}/sessions:
+    get:
+      summary: List charging sessions for station
+      parameters:
+        - $ref: "#/components/parameters/StationID"
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            minimum: 1
+            maximum: 500
+      responses:
+        "200":
+          description: Session history
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChargingSession"
+  /api/stations/{id}/meter-values:
+    get:
+      summary: List recent meter values for station charts
+      parameters:
+        - $ref: "#/components/parameters/StationID"
+        - name: minutes
+          in: query
+          schema:
+            type: integer
+            default: 30
+            minimum: 1
+            maximum: 1440
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 1000
+            minimum: 1
+            maximum: 5000
+      responses:
+        "200":
+          description: Recent power and energy values
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MeterValue"
+  /api/stations/{id}/start:
+    post:
+      summary: Publish start charging command
+      parameters:
+        - $ref: "#/components/parameters/StationID"
+      responses:
+        "202":
+          description: Command accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [station_id, transaction_id]
+                properties:
+                  station_id:
+                    type: string
+                  transaction_id:
+                    type: string
+  /api/stations/{id}/stop:
+    post:
+      summary: Publish stop charging command
+      parameters:
+        - $ref: "#/components/parameters/StationID"
+      responses:
+        "202":
+          description: Command accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [station_id, status]
+                properties:
+                  station_id:
+                    type: string
+                  status:
+                    type: string
+components:
+  parameters:
+    StationID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: station-1
+  schemas:
+    Station:
+      type: object
+      required: [id, max_power_kw, status, current_power_kw, current_meter_wh, updated_at]
+      properties:
+        id:
+          type: string
+        max_power_kw:
+          type: number
+          format: double
+        status:
+          type: string
+          enum: [Available, Preparing, Charging, Finishing, Faulted, Offline]
+        last_seen_at:
+          type: string
+          format: date-time
+          nullable: true
+        current_power_kw:
+          type: number
+          format: double
+        current_meter_wh:
+          type: integer
+          format: int64
+        active_transaction_id:
+          type: string
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+    ChargingSession:
+      type: object
+      required: [id, transaction_id, station_id, start_time, start_meter_wh]
+      properties:
+        id:
+          type: string
+          format: uuid
+        transaction_id:
+          type: string
+        station_id:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+          nullable: true
+        start_meter_wh:
+          type: integer
+          format: int64
+        end_meter_wh:
+          type: integer
+          format: int64
+          nullable: true
+        total_kwh:
+          type: number
+          format: double
+          nullable: true
+        total_cost:
+          type: number
+          format: double
+          nullable: true
+    MeterValue:
+      type: object
+      required: [station_id, measured_at, power_kw, meter_wh]
+      properties:
+        station_id:
+          type: string
+        transaction_id:
+          type: string
+          nullable: true
+        measured_at:
+          type: string
+          format: date-time
+        power_kw:
+          type: number
+          format: double
+        meter_wh:
+          type: integer
+          format: int64

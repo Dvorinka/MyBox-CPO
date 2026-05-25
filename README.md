@@ -1,37 +1,87 @@
 # MyBox CPO Test - Mini CPO Platform
 
-Vítej. Tohle je **startovací skeleton** pro testovací úkol full-stack developera u nás (elxtech). Postavíš zjednodušenou platformu pro správu flotily 5 EV nabíjecích stanic - vlastní simulátory, MQTT broker, backend, frontend dashboard. Vše orchestrované přes Docker Compose.
+Backend and simulator implementation for a local EV charging fleet demo. The stack runs Mosquitto, Postgres, a Go backend, five Go station simulators, and a placeholder frontend service that can be replaced by the dashboard.
 
-## Začni tady
+## Run
 
-1. **Přečti si zadání** → [`TASK.md`](TASK.md) (hard requirements, hodnotící matice, FAQ)
-2. **Klikni na "Use this template"** v GitHub UI a založ si vlastní repo (nebo si toto repo forkni)
-3. **Naklonuj si svůj repo lokálně** a začni stavět
-4. **Po dokončení** přepiš tento `README.md` svým (jak spustit tvé řešení) a vyplň [`DESIGN.md`](DESIGN.md)
-5. **Pošli nám link** na tvé hotové repo (instrukce v emailu)
+```bash
+docker compose up --build
+```
 
-## Co je v repu
+Services:
 
-| Soubor / složka | Co to je |
-|---|---|
-| [`TASK.md`](TASK.md) | **Plné zadání** - přečti si jako první |
-| [`DESIGN.md`](DESIGN.md) | Šablona design dokumentu, kterou na konci vyplníš |
-| [`docker-compose.yml`](docker-compose.yml) | Kostra Docker Compose - doplníš `image`/`build`/`command` dle své architektury |
-| [`.env.example`](.env.example) | Doporučené ENV proměnné - zkopíruj jako `.env` a doplň |
-| `backend/`, `frontend/`, `simulator/`, `mosquitto/` | Prázdné složky pro tvůj kód |
+- Backend REST/SSE API: http://localhost:8080
+- Placeholder frontend port: http://localhost:5173
+- MQTT broker: localhost:1883
+- Postgres: localhost:5432
 
-## Časový rámec
+## Test API Flow
 
-- **Cca 14-16 hodin čisté práce** - rozlož si je, jak ti vyhovuje
-- **Deadline na odevzdání: 7 dnů od dnešního dne** (přesný datum najdeš v emailu)
-- **AI asistent** (Claude Code / Cursor / Copilot) je vítaný a očekávaný
+Wait until the five simulators publish initial status messages, then:
 
-## Otázky?
+```bash
+curl http://localhost:8080/health
+curl http://localhost:8080/api/stations
+curl http://localhost:8080/api/stations/station-1
+curl -X POST http://localhost:8080/api/stations/station-1/start
+curl http://localhost:8080/api/stations/station-1/meter-values?minutes=10
+curl -X POST http://localhost:8080/api/stations/station-1/stop
+curl http://localhost:8080/api/stations/station-1/sessions
+```
 
-Když cokoli není jasné, **neváhej napsat na kontakt z emailu**. Interpretace v rámci selského rozumu je v pořádku - i o tom test je.
+Live updates are available through Server-Sent Events:
 
-Hodně štěstí!
+```bash
+curl -N http://localhost:8080/api/events
+```
 
----
+## MQTT Contract
 
-> _Tento repo je veřejně dostupný jako template. Tvé hotové řešení nech klidně private nebo public - na tvé volbě._
+Station telemetry topics:
+
+- `cpo/v1/stations/{stationId}/heartbeat` with QoS 1
+- `cpo/v1/stations/{stationId}/status` with QoS 1 and retained status
+- `cpo/v1/stations/{stationId}/meter` with QoS 0
+
+Command topics:
+
+- `cpo/v1/stations/{stationId}/commands/start_charging`
+- `cpo/v1/stations/{stationId}/commands/stop_charging`
+
+Payloads are JSON. The REST API contract is documented in [openapi.yaml](openapi.yaml).
+
+## Backend
+
+The backend uses Go, Gin, Paho MQTT, pgx, zap, and Postgres. On startup it runs SQL migrations from `backend/migrations`, subscribes to station topics, persists station/session/meter state, and marks stations `Offline` after 90 seconds without heartbeat.
+
+Session lifecycle:
+
+- `Preparing` or `Charging` status with `transaction_id` creates the session.
+- `meter` messages append time-series power and cumulative Wh points.
+- `Available` or `Faulted` status closes the latest active session and computes `total_kwh` and `total_cost`.
+
+## Frontend Wiring
+
+Kimi can bind directly to:
+
+- `GET /api/stations`
+- `GET /api/stations/:id`
+- `GET /api/stations/:id/sessions`
+- `GET /api/stations/:id/meter-values?minutes=30`
+- `POST /api/stations/:id/start`
+- `POST /api/stations/:id/stop`
+- `GET /api/events` for live updates
+
+The current `frontend` compose service is an nginx placeholder so `docker compose up` has a complete service graph before the dashboard lands.
+
+## Local Backend Checks
+
+```bash
+cd backend
+go test ./...
+go vet ./...
+
+cd ../simulator
+go test ./...
+go vet ./...
+```

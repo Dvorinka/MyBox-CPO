@@ -1,0 +1,323 @@
+package db
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type Store struct {
+	pool *pgxpool.Pool
+}
+
+type Station struct {
+	ID                  string     `json:"id"`
+	MaxPowerKW          float64    `json:"max_power_kw"`
+	Status              string     `json:"status"`
+	LastSeenAt          *time.Time `json:"last_seen_at,omitempty"`
+	CurrentPowerKW      float64    `json:"current_power_kw"`
+	CurrentMeterWh      int64      `json:"current_meter_wh"`
+	ActiveTransactionID *string    `json:"active_transaction_id,omitempty"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+type ChargingSession struct {
+	ID            string     `json:"id"`
+	TransactionID string     `json:"transaction_id"`
+	StationID     string     `json:"station_id"`
+	StartTime     time.Time  `json:"start_time"`
+	EndTime       *time.Time `json:"end_time,omitempty"`
+	StartMeterWh  int64      `json:"start_meter_wh"`
+	EndMeterWh    *int64     `json:"end_meter_wh,omitempty"`
+	TotalKWh      *float64   `json:"total_kwh,omitempty"`
+	TotalCost     *float64   `json:"total_cost,omitempty"`
+}
+
+type MeterValue struct {
+	StationID     string    `json:"station_id"`
+	TransactionID *string   `json:"transaction_id,omitempty"`
+	MeasuredAt    time.Time `json:"measured_at"`
+	PowerKW       float64   `json:"power_kw"`
+	MeterWh       int64     `json:"meter_wh"`
+}
+
+func NewStore(pool *pgxpool.Pool) *Store {
+	return &Store{pool: pool}
+}
+
+func (s *Store) Migrate(ctx context.Context) error {
+	// Runtime migrations keep `docker compose up` self-contained for reviewers.
+	if _, err := s.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version TEXT PRIMARY KEY,
+			applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+		);
+	`); err != nil {
+		return fmt.Errorf("ensure schema_migrations: %w", err)
+	}
+
+	files, err := filepath.Glob("migrations/*.sql")
+	if err != nil {
+		return fmt.Errorf("list migrations: %w", err)
+	}
+	sort.Strings(files)
+
+	for _, file := range files {
+		version := filepath.Base(file)
+		var exists bool
+		if err := s.pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)`, version).Scan(&exists); err != nil {
+			return fmt.Errorf("check migration %s: %w", version, err)
+		}
+		if exists {
+			continue
+		}
+		sql, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("read migration %s: %w", version, err)
+		}
+		if _, err := s.pool.Exec(ctx, string(sql)); err != nil {
+			return fmt.Errorf("apply migration %s: %w", version, err)
+		}
+		if _, err := s.pool.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, version); err != nil {
+			return fmt.Errorf("record migration %s: %w", version, err)
+		}
+	}
+	return nil
+}
+
+func (s *Store) UpsertHeartbeat(ctx context.Context, stationID string, maxPowerKW float64, status string, meterWh int64, seenAt time.Time) (Station, error) {
+	row := s.pool.QueryRow(ctx, `
+		INSERT INTO stations (id, max_power_kw, status, last_seen_at, current_meter_wh, updated_at)
+		VALUES ($1, $2, $3, $4, $5, now())
+		ON CONFLICT (id) DO UPDATE SET
+			max_power_kw = GREATEST(stations.max_power_kw, EXCLUDED.max_power_kw),
+			status = CASE WHEN stations.status = 'Offline' THEN EXCLUDED.status ELSE stations.status END,
+			last_seen_at = EXCLUDED.last_seen_at,
+			current_meter_wh = GREATEST(stations.current_meter_wh, EXCLUDED.current_meter_wh),
+			updated_at = now()
+		RETURNING id, max_power_kw, status, last_seen_at, current_power_kw, current_meter_wh, active_transaction_id, updated_at
+	`, stationID, maxPowerKW, status, seenAt, meterWh)
+	return scanStation(row)
+}
+
+func (s *Store) UpsertStatus(ctx context.Context, stationID string, maxPowerKW float64, status string, transactionID *string, meterWh int64, seenAt time.Time) (Station, error) {
+	activeTransactionID := transactionID
+	if status == "Available" || status == "Faulted" || status == "Offline" {
+		activeTransactionID = nil
+	}
+	row := s.pool.QueryRow(ctx, `
+		INSERT INTO stations (id, max_power_kw, status, last_seen_at, current_meter_wh, active_transaction_id, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, now())
+		ON CONFLICT (id) DO UPDATE SET
+			max_power_kw = GREATEST(stations.max_power_kw, EXCLUDED.max_power_kw),
+			status = EXCLUDED.status,
+			last_seen_at = EXCLUDED.last_seen_at,
+			current_meter_wh = GREATEST(stations.current_meter_wh, EXCLUDED.current_meter_wh),
+			active_transaction_id = EXCLUDED.active_transaction_id,
+			updated_at = now()
+		RETURNING id, max_power_kw, status, last_seen_at, current_power_kw, current_meter_wh, active_transaction_id, updated_at
+	`, stationID, maxPowerKW, status, seenAt, meterWh, activeTransactionID)
+	return scanStation(row)
+}
+
+func (s *Store) StartSession(ctx context.Context, stationID, transactionID string, meterWh int64, startedAt time.Time) error {
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO charging_sessions (transaction_id, station_id, start_time, start_meter_wh)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (transaction_id) DO NOTHING
+	`, transactionID, stationID, startedAt, meterWh)
+	return err
+}
+
+func (s *Store) StopSession(ctx context.Context, stationID string, transactionID *string, meterWh int64, stoppedAt time.Time, pricePerKWh float64) error {
+	if transactionID != nil && *transactionID != "" {
+		_, err := s.pool.Exec(ctx, `
+			UPDATE charging_sessions
+			SET end_time = $4,
+				end_meter_wh = $3,
+				total_kwh = GREATEST(($3 - start_meter_wh)::double precision / 1000.0, 0),
+				total_cost = GREATEST(($3 - start_meter_wh)::double precision / 1000.0, 0) * $5,
+				updated_at = now()
+			WHERE station_id = $1 AND transaction_id = $2 AND end_time IS NULL
+		`, stationID, *transactionID, meterWh, stoppedAt, pricePerKWh)
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `
+		UPDATE charging_sessions
+		SET end_time = $3,
+			end_meter_wh = $2,
+			total_kwh = GREATEST(($2 - start_meter_wh)::double precision / 1000.0, 0),
+			total_cost = GREATEST(($2 - start_meter_wh)::double precision / 1000.0, 0) * $4,
+			updated_at = now()
+		WHERE id = (
+			SELECT id FROM charging_sessions
+			WHERE station_id = $1 AND end_time IS NULL
+			ORDER BY start_time DESC
+			LIMIT 1
+		)
+	`, stationID, meterWh, stoppedAt, pricePerKWh)
+	return err
+}
+
+func (s *Store) InsertMeterValue(ctx context.Context, value MeterValue) (Station, error) {
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return Station{}, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
+		INSERT INTO meter_values (station_id, transaction_id, measured_at, power_kw, meter_wh)
+		VALUES ($1, $2, $3, $4, $5)
+	`, value.StationID, value.TransactionID, value.MeasuredAt, value.PowerKW, value.MeterWh); err != nil {
+		return Station{}, err
+	}
+
+	row := tx.QueryRow(ctx, `
+		UPDATE stations
+		SET status = 'Charging',
+			last_seen_at = $2,
+			current_power_kw = $3,
+			current_meter_wh = GREATEST(current_meter_wh, $4),
+			active_transaction_id = COALESCE($5, active_transaction_id),
+			updated_at = now()
+		WHERE id = $1
+		RETURNING id, max_power_kw, status, last_seen_at, current_power_kw, current_meter_wh, active_transaction_id, updated_at
+	`, value.StationID, value.MeasuredAt, value.PowerKW, value.MeterWh, value.TransactionID)
+	station, err := scanStation(row)
+	if err != nil {
+		return Station{}, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return Station{}, err
+	}
+	return station, nil
+}
+
+func (s *Store) ListStations(ctx context.Context) ([]Station, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, max_power_kw, status, last_seen_at, current_power_kw, current_meter_wh, active_transaction_id, updated_at
+		FROM stations
+		ORDER BY id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stations := make([]Station, 0)
+	for rows.Next() {
+		station, err := scanStation(rows)
+		if err != nil {
+			return nil, err
+		}
+		stations = append(stations, station)
+	}
+	return stations, rows.Err()
+}
+
+func (s *Store) GetStation(ctx context.Context, stationID string) (Station, error) {
+	row := s.pool.QueryRow(ctx, `
+		SELECT id, max_power_kw, status, last_seen_at, current_power_kw, current_meter_wh, active_transaction_id, updated_at
+		FROM stations
+		WHERE id = $1
+	`, stationID)
+	return scanStation(row)
+}
+
+func (s *Store) ListSessions(ctx context.Context, stationID string, limit int) ([]ChargingSession, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id::text, transaction_id, station_id, start_time, end_time, start_meter_wh, end_meter_wh, total_kwh, total_cost
+		FROM charging_sessions
+		WHERE station_id = $1
+		ORDER BY start_time DESC
+		LIMIT $2
+	`, stationID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	sessions := make([]ChargingSession, 0)
+	for rows.Next() {
+		var session ChargingSession
+		if err := rows.Scan(&session.ID, &session.TransactionID, &session.StationID, &session.StartTime, &session.EndTime, &session.StartMeterWh, &session.EndMeterWh, &session.TotalKWh, &session.TotalCost); err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+	return sessions, rows.Err()
+}
+
+func (s *Store) ListMeterValues(ctx context.Context, stationID string, since time.Time, limit int) ([]MeterValue, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT station_id, transaction_id, measured_at, power_kw, meter_wh
+		FROM meter_values
+		WHERE station_id = $1 AND measured_at >= $2
+		ORDER BY measured_at ASC
+		LIMIT $3
+	`, stationID, since, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	values := make([]MeterValue, 0)
+	for rows.Next() {
+		var value MeterValue
+		if err := rows.Scan(&value.StationID, &value.TransactionID, &value.MeasuredAt, &value.PowerKW, &value.MeterWh); err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, rows.Err()
+}
+
+func (s *Store) MarkOffline(ctx context.Context, offlineAfter time.Duration) ([]Station, error) {
+	rows, err := s.pool.Query(ctx, `
+		UPDATE stations
+		SET status = 'Offline',
+			current_power_kw = 0,
+			active_transaction_id = NULL,
+			updated_at = now()
+		WHERE status <> 'Offline'
+			AND (last_seen_at IS NULL OR last_seen_at < now() - ($1 * interval '1 second'))
+		RETURNING id, max_power_kw, status, last_seen_at, current_power_kw, current_meter_wh, active_transaction_id, updated_at
+	`, offlineAfter.Seconds())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	stations := make([]Station, 0)
+	for rows.Next() {
+		station, err := scanStation(rows)
+		if err != nil {
+			return nil, err
+		}
+		stations = append(stations, station)
+	}
+	return stations, rows.Err()
+}
+
+func scanStation(row pgx.Row) (Station, error) {
+	var station Station
+	err := row.Scan(
+		&station.ID,
+		&station.MaxPowerKW,
+		&station.Status,
+		&station.LastSeenAt,
+		&station.CurrentPowerKW,
+		&station.CurrentMeterWh,
+		&station.ActiveTransactionID,
+		&station.UpdatedAt,
+	)
+	return station, err
+}

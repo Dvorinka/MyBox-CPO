@@ -1,55 +1,130 @@
-# Startovací kostra docker-compose.yml pro Mini CPO Platform
-#
-# Doplň: image / build / command / volumes / depends_on dle své architektury.
-# Mosquitto je předepsaný (lightweight, zero-config). Vše ostatní je tvoje volba.
-#
-# Cíl: po `docker compose up` musí naběhnout celý systém out-of-the-box.
-
 services:
   mosquitto:
-    # MQTT broker - předepsaný Mosquitto
-    # Doplň: image (např. eclipse-mosquitto:2), ports (1883, případně 9001 pro WS),
-    # volumes pro config (./mosquitto/config:/mosquitto/config)
+    image: eclipse-mosquitto:2.0.20
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - mosquitto-data:/mosquitto/data
     networks:
       - cpo-net
 
   db:
-    # Databáze - tvoje volba (Postgres / MySQL / Mongo / InfluxDB / kombinace)
-    # Doplň: image, environment, volumes pro persist
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: cpo
+      POSTGRES_PASSWORD: cpo
+      POSTGRES_DB: cpo
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cpo -d cpo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     networks:
       - cpo-net
 
   backend:
-    # Backend - REST API + MQTT subscriber + session lifecycle
-    # Doplň: build context (./backend), environment, depends_on (mosquitto, db), ports
+    build:
+      context: ./backend
+    environment:
+      HTTP_ADDR: ":8080"
+      DATABASE_URL: postgres://cpo:cpo@db:5432/cpo?sslmode=disable
+      MQTT_BROKER: tcp://mosquitto:1883
+      MQTT_CLIENT_ID: cpo-backend
+      PRICE_PER_KWH: "8.50"
+      OFFLINE_AFTER_SECONDS: "90"
+      CORS_ALLOWED_ORIGINS: "*"
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      mosquitto:
+        condition: service_started
     networks:
       - cpo-net
 
   frontend:
-    # Frontend dashboard - live view + detail + sessions history
-    # Doplň: build context (./frontend), environment, ports
+    image: nginx:1.27-alpine
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_started
     networks:
       - cpo-net
 
   station-1:
-    # Simulátor stanice #1
-    # Doplň: build context (./simulator), environment (STATION_ID, MAX_POWER_KW, FAULT_PROBABILITY), depends_on (mosquitto)
+    build:
+      context: ./simulator
+    environment:
+      STATION_ID: station-1
+      MQTT_BROKER: tcp://mosquitto:1883
+      MAX_POWER_KW: "22"
+      FAULT_PROBABILITY: "0.005"
+    depends_on:
+      mosquitto:
+        condition: service_started
     networks:
       - cpo-net
 
   station-2:
+    build:
+      context: ./simulator
+    environment:
+      STATION_ID: station-2
+      MQTT_BROKER: tcp://mosquitto:1883
+      MAX_POWER_KW: "50"
+      FAULT_PROBABILITY: "0.01"
+    depends_on:
+      mosquitto:
+        condition: service_started
     networks:
       - cpo-net
 
   station-3:
+    build:
+      context: ./simulator
+    environment:
+      STATION_ID: station-3
+      MQTT_BROKER: tcp://mosquitto:1883
+      MAX_POWER_KW: "75"
+      FAULT_PROBABILITY: "0.008"
+    depends_on:
+      mosquitto:
+        condition: service_started
     networks:
       - cpo-net
 
   station-4:
+    build:
+      context: ./simulator
+    environment:
+      STATION_ID: station-4
+      MQTT_BROKER: tcp://mosquitto:1883
+      MAX_POWER_KW: "150"
+      FAULT_PROBABILITY: "0.015"
+    depends_on:
+      mosquitto:
+        condition: service_started
     networks:
       - cpo-net
 
   station-5:
+    build:
+      context: ./simulator
+    environment:
+      STATION_ID: station-5
+      MQTT_BROKER: tcp://mosquitto:1883
+      MAX_POWER_KW: "300"
+      FAULT_PROBABILITY: "0.02"
+    depends_on:
+      mosquitto:
+        condition: service_started
     networks:
       - cpo-net
 
@@ -57,6 +132,6 @@ networks:
   cpo-net:
     driver: bridge
 
-# volumes:
-#   db-data:
-#   mosquitto-data:
+volumes:
+  db-data:
+  mosquitto-data:
