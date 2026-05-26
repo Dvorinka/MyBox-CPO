@@ -48,8 +48,26 @@ export default function Dashboard() {
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [actionLoading, setActionLoading] = useState<Record<string, "start" | "stop" | null>>({})
+  const [refreshing, setRefreshing] = useState(false)
 
-  const stationIds = useMemo(() => stations.map((s) => s.id), [stations])
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      await refresh()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const sortedStations = useMemo(() => {
+    return [...stations].sort((a, b) => {
+      const na = parseInt(a.id.replace(/^\D+/, ""), 10)
+      const nb = parseInt(b.id.replace(/^\D+/, ""), 10)
+      return na - nb
+    })
+  }, [stations])
+
+  const stationIds = useMemo(() => sortedStations.map((s) => s.id), [sortedStations])
   const { data: allSessions = [], isLoading: sessionsLoading } = useAllSessions(stationIds)
 
   const stats = useMemo(() => {
@@ -103,8 +121,8 @@ export default function Dashboard() {
             {t("realTimeMonitoring", { count: stats.total })}
           </p>
         </div>
-        <Button variant="ghost" size="sm" onClick={refresh} className="gap-1.5">
-          <RefreshCw className="h-3.5 w-3.5" />
+        <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={refreshing} className="gap-1.5">
+          <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
           {t("refresh")}
         </Button>
       </div>
@@ -154,13 +172,13 @@ export default function Dashboard() {
                 <Skeleton key={i} className="h-[220px] rounded-xl" />
               ))}
             </div>
-          ) : stations.length === 0 ? (
+          ) : sortedStations.length === 0 ? (
             <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed">
               <p className="text-sm text-muted-foreground">{t("noStationsConnected")}</p>
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
-              {stations.map((station) => (
+              {sortedStations.map((station) => (
                 <StationCard
                   key={station.id}
                   station={station}
@@ -195,7 +213,7 @@ export default function Dashboard() {
               <MapPin className="h-3.5 w-3.5" />
               {t("fleetMap")}
             </h2>
-            <FleetMap stations={stations} onOpenDetail={openDetail} />
+            <FleetMap stations={sortedStations} sessions={allSessions} onOpenDetail={openDetail} />
           </div>
         </div>
       </div>
@@ -212,102 +230,228 @@ export default function Dashboard() {
       </Suspense>
     </div>
   )
+
+
+function getViewportForStations(stations: Station[]): MapViewport {
+  if (stations.length === 0) {
+    return { center: [14.4378, 50.0755], zoom: 11, bearing: 0, pitch: 0 }
+  }
+  const locs = stations.map((s) => getStationLocation(s.id))
+  const lats = locs.map((l) => l.latitude)
+  const lngs = locs.map((l) => l.longitude)
+  const minLat = Math.min(...lats)
+  const maxLat = Math.max(...lats)
+  const minLng = Math.min(...lngs)
+  const maxLng = Math.max(...lngs)
+  const center: [number, number] = [(minLng + maxLng) / 2, (minLat + maxLat) / 2]
+  const latSpread = maxLat - minLat
+  const lngSpread = maxLng - minLng
+  const maxSpread = Math.max(latSpread, lngSpread)
+  const padding = 1.6
+  const zoom = Math.max(6, Math.min(14, Math.floor(Math.log2(360 / (maxSpread * padding)))))
+  return { center, zoom, bearing: 0, pitch: 0 }
 }
 
 function FleetMap({
   stations,
+  sessions,
   onOpenDetail,
 }: {
+  stations: Station[]
+  sessions: ChargingSession[]
+  onOpenDetail: (station: Station) => void
+}) {
+  const { t } = useI18n()
+  const initialViewport = useMemo(() => getViewportForStations(stations), [stations])
+  const [viewport, setViewport] = useState<MapViewport>(initialViewport)
+
+  const handleOpenDetail = (station: Station) => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+    }
+    onOpenDetail(station)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="relative h-[320px] w-full overflow-hidden rounded-xl border">
+        <Map viewport={viewport} onViewportChange={setViewport}>
+          <MapControls
+            position="top-right"
+            showZoom
+            showCompass
+            showLocate
+            showFullscreen
+          />
+          {stations.map((station) => {
+            const loc = getStationLocation(station.id)
+            const isCharging = station.status === "Charging"
+            return (
+              <MapMarker
+                key={station.id}
+                longitude={loc.longitude}
+                latitude={loc.latitude}
+              >
+                <MarkerContent>
+                  <button
+                    onClick={() => handleOpenDetail(station)}
+                    className={cn(
+                      "relative size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
+                      station.status === "Faulted"
+                        ? "bg-red-500"
+                        : isCharging
+                        ? "bg-primary"
+                        : "bg-accent"
+                    )}
+                  >
+                    {isCharging && (
+                      <span className="absolute inset-0 animate-ping rounded-full bg-primary/60" />
+                    )}
+                  </button>
+                </MarkerContent>
+                <MarkerTooltip>{station.id}</MarkerTooltip>
+                <MapPopup longitude={loc.longitude} latitude={loc.latitude}>
+                  <div className="space-y-1">
+                    <p className="font-medium text-foreground">{station.id}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {station.status} · {station.current_power_kw.toFixed(1)} kW
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-1 w-full text-xs"
+                      onClick={() => handleOpenDetail(station)}
+                    >
+                      {t("details")}
+                    </Button>
+                  </div>
+                </MapPopup>
+              </MapMarker>
+            )
+          })}
+        </Map>
+      </div>
+
+      <FinishedSessionsList sessions={sessions} stations={stations} onOpenDetail={onOpenDetail} />
+    </div>
+  )
+}
+
+function formatDurationMins(start: string, end: string): string {
+  const mins = Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+  if (mins < 60) return `${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m === 0 ? `${h} h` : `${h} h ${m} min`
+}
+
+function FinishedSessionsList({
+  sessions,
+  stations,
+  onOpenDetail,
+}: {
+  sessions: ChargingSession[]
   stations: Station[]
   onOpenDetail: (station: Station) => void
 }) {
   const { t } = useI18n()
-  const [viewport, setViewport] = useState<MapViewport>({
-    center: [14.4378, 50.0755],
-    zoom: 11,
-    bearing: 0,
-    pitch: 0,
-  })
+  const [page, setPage] = useState(0)
+  const pageSize = 4
+
+  const finished = sessions
+    .filter((s) => s.end_time !== null)
+    .sort((a, b) => new Date(b.start_time).getTime() - new Date(a.start_time).getTime())
+
+  const totalPages = Math.ceil(finished.length / pageSize)
+  const currentPageData = finished.slice(page * pageSize, (page + 1) * pageSize)
+
+  const stationMap = useMemo(() => {
+    const map: Record<string, Station> = {}
+    for (const s of stations) map[s.id] = s
+    return map
+  }, [stations])
 
   return (
-    <div className="relative h-[320px] w-full overflow-hidden rounded-xl border">
-      <Map viewport={viewport} onViewportChange={setViewport}>
-        <MapControls
-          position="top-right"
-          showZoom
-          showCompass
-          showLocate
-          showFullscreen
-        />
-        {stations.map((station) => {
-          const loc = getStationLocation(station.id)
-          const isCharging = station.status === "Charging"
-          return (
-            <MapMarker
-              key={station.id}
-              longitude={loc.longitude}
-              latitude={loc.latitude}
-            >
-              <MarkerContent>
-                <button
-                  onClick={() => onOpenDetail(station)}
-                  className={cn(
-                    "relative size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
-                    station.status === "Faulted"
-                      ? "bg-red-500"
-                      : isCharging
-                      ? "bg-primary"
-                      : "bg-accent"
-                  )}
-                >
-                  {isCharging && (
-                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/60" />
-                  )}
-                </button>
-              </MarkerContent>
-              <MarkerTooltip>{station.id}</MarkerTooltip>
-              <MapPopup longitude={loc.longitude} latitude={loc.latitude}>
-                <div className="space-y-1">
-                  <p className="font-medium text-foreground">{station.id}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {station.status} · {station.current_power_kw.toFixed(1)} kW
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-1 w-full text-xs"
-                    onClick={() => onOpenDetail(station)}
+    <div className="rounded-xl border">
+      {finished.length === 0 ? (
+        <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+          {t("noChargingSessionsRecorded")}
+        </div>
+      ) : (
+        <>
+          <table className="w-full text-sm">
+            <thead className="border-b">
+              <tr className="text-left text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <th className="px-3 py-2">{t("endTime")}</th>
+                <th className="px-3 py-2 text-right">{t("energy")}</th>
+                <th className="px-3 py-2 text-right">{t("duration")}</th>
+                <th className="px-3 py-2">{t("tariff")}</th>
+                <th className="px-3 py-2 text-right">{t("cost")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {currentPageData.map((session) => {
+                const station = stationMap[session.station_id]
+                return (
+                  <tr
+                    key={session.id}
+                    onClick={() => station && onOpenDetail(station)}
+                    className="border-b transition-colors hover:bg-muted/50 last:border-b-0 cursor-pointer"
                   >
-                    {t("details")}
-                  </Button>
-                </div>
-              </MapPopup>
-            </MapMarker>
-          )
-        })}
-      </Map>
-      <div className="absolute bottom-2 left-2 z-10 flex flex-wrap gap-x-3 gap-y-1 rounded border bg-background/80 px-2 py-1.5 font-mono text-xs backdrop-blur">
-        <span>
-          <span className="text-muted-foreground">lng:</span>{" "}
-          {viewport.center[0].toFixed(4)}
-        </span>
-        <span>
-          <span className="text-muted-foreground">lat:</span>{" "}
-          {viewport.center[1].toFixed(4)}
-        </span>
-        <span>
-          <span className="text-muted-foreground">zoom:</span>{" "}
-          {viewport.zoom.toFixed(1)}
-        </span>
-        <span>
-          <span className="text-muted-foreground">bearing:</span>{" "}
-          {(viewport.bearing ?? 0).toFixed(1)}°
-        </span>
-        <span>
-          <span className="text-muted-foreground">pitch:</span>{" "}
-          {(viewport.pitch ?? 0).toFixed(1)}°
-        </span>
-      </div>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                      {format(new Date(session.start_time), "MMM d, HH:mm")}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                      {session.end_time ? format(new Date(session.end_time), "MMM d, HH:mm") : "—"}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                      {session.total_kwh != null ? `${session.total_kwh.toFixed(2)} kWh` : "—"}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-right text-xs tabular-nums">
+                      {session.end_time
+                        ? formatDurationMins(session.start_time, session.end_time)
+                        : t("inProgress")}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">
+                      {session.pricing_tariff ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap text-right text-xs tabular-nums font-medium">
+                      {session.total_cost != null ? `${session.total_cost.toFixed(2)} CZK` : "—"}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-3 py-2">
+              <span className="text-xs text-muted-foreground">
+                {t("page", { current: page + 1, total: totalPages })}
+              </span>
+              <div className="flex gap-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  disabled={page === 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  ←
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  disabled={page === totalPages - 1}
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                >
+                  →
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -479,4 +623,4 @@ function StationCard({
       </CardContent>
     </Card>
   )
-}
+}}

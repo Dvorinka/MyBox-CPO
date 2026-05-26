@@ -78,7 +78,13 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
   }, [open])
 
   useEffect(() => {
-    if (!open || !chartReady) return
+    if (open) {
+      setActiveTab("overview")
+    }
+  }, [open, stationID])
+
+  useEffect(() => {
+    if (!open || !chartReady || activeTab !== "overview") return
     const element = chartContainerRef.current
     if (!element) return
     const updateWidth = () => setChartWidth(Math.max(0, Math.floor(element.getBoundingClientRect().width)))
@@ -86,7 +92,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
     const observer = new ResizeObserver(updateWidth)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [open, chartReady])
+  }, [open, chartReady, activeTab])
 
   useEffect(() => {
     if (activeTab !== "overview" || !chartContainerRef.current) return

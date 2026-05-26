@@ -367,9 +367,9 @@ func optionalString(value string) *string {
 }
 
 func newTransactionID() (string, error) {
-	var bytes [16]byte
-	if _, err := rand.Read(bytes[:]); err != nil {
+	var b [6]byte
+	if _, err := rand.Read(b[:]); err != nil {
 		return "", err
 	}
-	return hex.EncodeToString(bytes[:]), nil
+	return hex.EncodeToString(b[:]), nil
 }

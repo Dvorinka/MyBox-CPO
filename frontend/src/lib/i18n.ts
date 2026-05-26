@@ -54,6 +54,7 @@ const dictionary = {
     startChargingFailed: "Start charging failed for {{id}}",
     stopChargingFailed: "Stop charging failed for {{id}}",
     simulatorOffline: "Simulator or MQTT broker may be offline.",
+    refreshSuccess: "Data refreshed",
 
     // Station Detail
     overview: "Overview",
@@ -124,6 +125,7 @@ const dictionary = {
     language: "Language",
     english: "English",
     czech: "Čeština",
+    page: "Page {{current}} of {{total}}",
   },
   cs: {
     // Layout
@@ -162,6 +164,7 @@ const dictionary = {
     startChargingFailed: "Zahájení nabíjení pro {{id}} selhalo",
     stopChargingFailed: "Ukončení nabíjení pro {{id}} selhalo",
     simulatorOffline: "Simulátor nebo MQTT broker může být offline.",
+    refreshSuccess: "Data aktualizována",
 
     // Station Detail
     overview: "Přehled",
@@ -232,6 +235,7 @@ const dictionary = {
     language: "Jazyk",
     english: "English",
     czech: "Čeština",
+    page: "Strana {{current}} z {{total}}",
   },
 }
 

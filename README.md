@@ -21,10 +21,19 @@ Jednoduchá CPO platforma pro monitoring 5 EV stanic v reálném čase. MQTT →
 
 ---
 
+## Prerekvizity
+
+- Docker Engine ≥ 24.0
+- Docker Compose ≥ 2.20
+
 ## Spuštění
 
 ```bash
-docker compose up -d
+# První spuštění (vyžaduje build)
+docker compose up --build -d
+
+# Další spuštění
+ docker compose up -d
 ```
 
 ### Služby
@@ -41,10 +50,11 @@ docker compose up -d
 
 1. Otevři dashboard na [http://localhost:5173](http://localhost:5173)
 2. Přihlaš se pomocí `admin / admin`
-3. Spusť nabíjení na vybrané stanici
-4. Sleduj live data přes SSE
-5. Ukonči session → automatický výpočet ceny
-6. **Station-5** běží automaticky v chaos mode
+3. Klikni na kartu stanice (např. station-1) → otevře se detail
+4. V záložce **Přehled** klikni na **Zahájit nabíjení** → sleduj nárůst výkonu a energie v reálném čase
+5. Po chvíli klikni na **Ukončit nabíjení** → cena se vypočítá automaticky podle nastaveného tarifu
+6. Vrať se na dashboard a sleduj živý graf aktivity v sekci **Aktivita nabíjení**
+7. **Station-5** běží automaticky v chaos mode (automaticky startuje, zastavuje a simuluje chyby)
 
 ---
 

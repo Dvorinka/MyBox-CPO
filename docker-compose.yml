@@ -90,7 +90,7 @@ services:
       MQTT_BROKER: tcp://mosquitto:1883
       STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "22"
-      FAULT_PROBABILITY: "0.005"
+      FAULT_PROBABILITY: "0"
     depends_on:
       mosquitto:
         condition: service_started
@@ -110,7 +110,7 @@ services:
       MQTT_BROKER: tcp://mosquitto:1883
       STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "50"
-      FAULT_PROBABILITY: "0.01"
+      FAULT_PROBABILITY: "0"
     depends_on:
       mosquitto:
         condition: service_started
@@ -130,7 +130,7 @@ services:
       MQTT_BROKER: tcp://mosquitto:1883
       STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "75"
-      FAULT_PROBABILITY: "0.008"
+      FAULT_PROBABILITY: "0"
     depends_on:
       mosquitto:
         condition: service_started

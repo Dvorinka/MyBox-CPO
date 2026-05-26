@@ -5,13 +5,18 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/** Deterministic lat/lng around Prague for demo stations based on id hash */
+/** Deterministic lat/lng spread across Prague region for demo stations based on id hash */
 export function getStationLocation(id: string): { latitude: number; longitude: number } {
-  let hash = 0
+  let h1 = 0, h2 = 0
   for (let i = 0; i < id.length; i++) {
-    hash = id.charCodeAt(i) + ((hash << 5) - hash)
+    const c = id.charCodeAt(i)
+    h1 = ((h1 << 5) - h1 + c + i * 31) | 0
+    h2 = ((h2 << 7) - h2 + c * 17 + i) | 0
   }
-  const lat = 50.0755 + (hash % 1000) / 2500
-  const lng = 14.4378 + ((hash >> 4) % 1000) / 2500
+  // Spread stations wide across Prague region (~±30 km N/S, ±40 km E/W)
+  const latOffset = ((Math.abs(h1) % 10000) / 10000 - 0.5) * 0.55
+  const lngOffset = ((Math.abs(h2) % 10000) / 10000 - 0.5) * 0.70
+  const lat = 50.0755 + latOffset
+  const lng = 14.4378 + lngOffset
   return { latitude: Number(lat.toFixed(4)), longitude: Number(lng.toFixed(4)) }
 }

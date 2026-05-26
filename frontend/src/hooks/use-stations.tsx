@@ -27,8 +27,12 @@ export function StationsProvider({ children }: { children: React.ReactNode }) {
   })
 
   const refresh = useCallback(async () => {
-    await queryClient.invalidateQueries({ queryKey: ["stations"] })
-  }, [queryClient])
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["stations"] }),
+      queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
+    ])
+    toast.success(t("refreshSuccess"))
+  }, [queryClient, t])
 
   useEffect(() => {
     const unsubscribe = subscribeEvents((type, data) => {

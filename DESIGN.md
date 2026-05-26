@@ -61,6 +61,8 @@ Neumí reálné UX testování. Proto aplikaci vždy projdu ručně, klikám, te
 | **Postgres bez specializované TS DB** | Pro 5 stací nám stačí běžná databáze, nepotřebujeme TimescaleDB |
 | **Outbox pattern pro commands** | Uložíme command do DB, pak ho pošleme - když selže, pošleme znovu |
 | **Chaos mód na 5. stanici** | Simuluje nestabilní hardware pro testování error handlingu |
+| **State management: in-memory + DB** | Pro demo s 5 stanicemi stačí Postgres jako zdroj pravdy; žádný Redis ani extra cache |
+| **Error handling: retry přes outbox** | Příkazy se zapisují do DB a retry worker je odesílá; žádný circuit breaker/DLQ pro tento rozsah |
 
 ---
 
