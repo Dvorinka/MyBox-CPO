@@ -16,7 +16,7 @@ export interface ChartTheme {
 export function useChartTheme(): ChartTheme {
   const isDark = useIsDark()
 
-  const gridStroke = isDark ? "#2a2d35" : "#e2e8f0"
+  const gridStroke = isDark ? "#1f1f1f" : "#e2e8f0"
   const tickFill = isDark ? "#8e8e8e" : "#64748b"
 
   return {
@@ -27,7 +27,7 @@ export function useChartTheme(): ChartTheme {
       borderRadius: "8px",
       border: `1px solid ${gridStroke}`,
       boxShadow: "none",
-      backgroundColor: isDark ? "#1e2128" : "#ffffff",
+      backgroundColor: isDark ? "#111111" : "#ffffff",
       color: isDark ? "#ffffff" : "#0f172a",
     },
     primary: isDark ? "#3b82f6" : "#102472",

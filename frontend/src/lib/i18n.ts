@@ -49,6 +49,11 @@ const dictionary = {
     stopCharging: "Stop Charging",
     starting: "Starting...",
     stopping: "Stopping...",
+    startChargingSent: "Start charging command sent to {{id}}",
+    stopChargingSent: "Stop charging command sent to {{id}}",
+    startChargingFailed: "Start charging failed for {{id}}",
+    stopChargingFailed: "Stop charging failed for {{id}}",
+    simulatorOffline: "Simulator or MQTT broker may be offline.",
 
     // Station Detail
     overview: "Overview",
@@ -152,6 +157,11 @@ const dictionary = {
     stopCharging: "Ukončit nabíjení",
     starting: "Zahajování...",
     stopping: "Ukončování...",
+    startChargingSent: "Příkaz k zahájení nabíjení odeslán do {{id}}",
+    stopChargingSent: "Příkaz k ukončení nabíjení odeslán do {{id}}",
+    startChargingFailed: "Zahájení nabíjení pro {{id}} selhalo",
+    stopChargingFailed: "Ukončení nabíjení pro {{id}} selhalo",
+    simulatorOffline: "Simulátor nebo MQTT broker může být offline.",
 
     // Station Detail
     overview: "Přehled",

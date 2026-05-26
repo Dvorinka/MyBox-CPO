@@ -54,22 +54,22 @@
 }
 
 .dark {
-  --color-background: #171a20;
+  --color-background: #0a0a0a;
   --color-foreground: #ffffff;
 
-  --color-card: #1e2128;
+  --color-card: #111111;
   --color-card-foreground: #ffffff;
 
-  --color-popover: #1e2128;
+  --color-popover: #111111;
   --color-popover-foreground: #ffffff;
 
   --color-primary: #3b82f6;
   --color-primary-foreground: #ffffff;
 
-  --color-secondary: #2a2d35;
+  --color-secondary: #1a1a1a;
   --color-secondary-foreground: #ffffff;
 
-  --color-muted: #2a2d35;
+  --color-muted: #1a1a1a;
   --color-muted-foreground: #8e8e8e;
 
   --color-accent: #2596be;
@@ -78,8 +78,8 @@
   --color-destructive: #ef4444;
   --color-destructive-foreground: #ffffff;
 
-  --color-border: #2a2d35;
-  --color-input: #2a2d35;
+  --color-border: #1f1f1f;
+  --color-input: #1f1f1f;
   --color-ring: #3b82f6;
 
   --color-chart-1: #3b82f6;

@@ -22,7 +22,7 @@ interface RevenueDetailProps {
 
 export default function RevenueDetail({ sessions, stations, open, onOpenChange }: RevenueDetailProps) {
   const { t } = useI18n()
-  const { isDark, gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
+  const { isDark, gridStroke, tickFill, tooltipStyle, primary, primaryDark, accent, accentDark } = useChartTheme()
 
   const stats = useMemo(() => {
     const stationStats = new Map<string, { peakRev: number; offPeakRev: number; sessions: number; energy: number }>()
@@ -66,10 +66,10 @@ export default function RevenueDetail({ sessions, stations, open, onOpenChange }
     }))
 
     const pieData = [
-      { name: "AC", value: Number(overall.acRev.toFixed(2)), fill: accent },
+      { name: "AC", value: Number(overall.acRev.toFixed(2)), fill: primaryDark },
       { name: "DC", value: Number(overall.dcRev.toFixed(2)), fill: primary },
-      { name: t("peakRevenue"), value: Number(overall.peakRev.toFixed(2)), fill: destructive },
-      { name: t("offPeakRevenue"), value: Number(overall.offPeakRev.toFixed(2)), fill: "#38bdf8" },
+      { name: t("peakRevenue"), value: Number(overall.peakRev.toFixed(2)), fill: accent },
+      { name: t("offPeakRevenue"), value: Number(overall.offPeakRev.toFixed(2)), fill: accentDark },
     ].filter((d) => d.value > 0)
 
     return {
@@ -118,7 +118,7 @@ export default function RevenueDetail({ sessions, stations, open, onOpenChange }
                       const num = typeof value === "number" ? value : 0
                       return [`${num.toFixed(2)} Kč`, label]
                     }} />
-                    <Bar dataKey="peak" stackId="a" fill={destructive} radius={[0, 0, 4, 4]} />
+                    <Bar dataKey="peak" stackId="a" fill={primaryDark} radius={[0, 0, 4, 4]} />
                     <Bar dataKey="offPeak" stackId="a" fill={primary} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

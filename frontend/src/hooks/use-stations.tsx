@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import type { MeterValue, Station, StationCommand } from "@/types"
 import { api, subscribeEvents } from "@/lib/api"
+import { useI18n } from "@/lib/i18n"
 
 interface StationsContextType {
   stations: Station[]
@@ -17,6 +18,7 @@ const StationsContext = createContext<StationsContextType | null>(null)
 
 export function StationsProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
+  const { t } = useI18n()
 
   const { data: stations = [], isLoading, error } = useQuery<Station[]>({
     queryKey: ["stations"],
@@ -78,16 +80,16 @@ export function StationsProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["stations"] }),
         queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
       ])
-      toast.success(`Start charging command sent to ${id}`)
+      toast.success(t("startChargingSent", { id }))
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error"
-      toast.error(`Start charging failed for ${id}`, {
+      toast.error(t("startChargingFailed", { id }), {
         description: message.includes("502") || message.includes("Bad Gateway")
-          ? "Simulator or MQTT broker may be offline."
+          ? t("simulatorOffline")
           : message,
       })
     }
-  }, [queryClient])
+  }, [queryClient, t])
 
   const stopCharging = useCallback(async (id: string) => {
     try {
@@ -98,16 +100,16 @@ export function StationsProvider({ children }: { children: React.ReactNode }) {
         queryClient.invalidateQueries({ queryKey: ["meter-values", id] }),
         queryClient.invalidateQueries({ queryKey: ["all-sessions"] }),
       ])
-      toast.success(`Stop charging command sent to ${id}`)
+      toast.success(t("stopChargingSent", { id }))
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error"
-      toast.error(`Stop charging failed for ${id}`, {
+      toast.error(t("stopChargingFailed", { id }), {
         description: message.includes("502") || message.includes("Bad Gateway")
-          ? "Simulator or MQTT broker may be offline."
+          ? t("simulatorOffline")
           : message,
       })
     }
-  }, [queryClient])
+  }, [queryClient, t])
 
   return (
     <StationsContext.Provider

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -87,7 +88,23 @@ func main() {
 		go station.autoCycle(ctx)
 	}
 
+	go station.serveHealth(ctx)
+
 	station.run(ctx)
+}
+
+func (s *Station) serveHealth(ctx context.Context) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	})
+	server := &http.Server{Addr: ":8080", Handler: mux}
+	go func() {
+		<-ctx.Done()
+		server.Shutdown(context.Background())
+	}()
+	server.ListenAndServe()
 }
 
 func loadConfig() Config {

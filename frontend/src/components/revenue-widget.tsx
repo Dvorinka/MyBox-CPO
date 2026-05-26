@@ -13,7 +13,7 @@ interface RevenueWidgetProps {
 
 export default function RevenueWidget({ sessions, stations, onClick }: RevenueWidgetProps) {
   const { t } = useI18n()
-  const { gridStroke, tickFill, tooltipStyle, primary, destructive } = useChartTheme()
+  const { gridStroke, tickFill, tooltipStyle, primary, primaryDark } = useChartTheme()
 
   const data = useMemo(() => {
     const stationMap = new Map<string, { peak: number; offPeak: number }>()
@@ -66,7 +66,7 @@ export default function RevenueWidget({ sessions, stations, onClick }: RevenueWi
                     return [`${num.toFixed(2)} Kč`, label]
                   }}
                 />
-                <Bar dataKey="peak" stackId="a" fill={destructive} radius={[0, 0, 4, 4]} />
+                <Bar dataKey="peak" stackId="a" fill={primaryDark} radius={[0, 0, 4, 4]} />
                 <Bar dataKey="offPeak" stackId="a" fill={primary} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

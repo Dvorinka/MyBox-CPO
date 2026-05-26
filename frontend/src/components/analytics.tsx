@@ -10,7 +10,6 @@ import {
   Cell,
   RadialBarChart,
   RadialBar,
-  PolarGrid,
   PolarRadiusAxis,
   Label,
 } from "recharts"
@@ -28,7 +27,7 @@ interface AnalyticsProps {
 
 export default function Analytics({ sessions, stations }: AnalyticsProps) {
   const { t } = useI18n()
-  const { isDark, gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
+  const { isDark, gridStroke, tickFill, tooltipStyle, primary, accent } = useChartTheme()
 
   // Top 3 stations by total energy delivered
   const topStations = useMemo(() => {
@@ -94,27 +93,6 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
     })
   }, [stations, sessions])
 
-  // Station status distribution for radial grid
-  const statusDistribution = useMemo(() => {
-    const counts: Record<string, number> = {}
-    stations.forEach((s) => {
-      counts[s.status] = (counts[s.status] ?? 0) + 1
-    })
-    const colors: Record<string, string> = {
-      Available: isDark ? "#3b82f6" : "var(--chart-1)",
-      Charging: isDark ? "#2596be" : "var(--chart-2)",
-      Preparing: isDark ? "#38bdf8" : "var(--chart-3)",
-      Faulted: isDark ? "#ef4444" : "var(--color-destructive)",
-      Offline: isDark ? "#5c5e62" : "var(--chart-5)",
-      Finishing: isDark ? "#8e8e8e" : "var(--chart-4)",
-    }
-    return Object.entries(counts).map(([status, count]) => ({
-      name: status,
-      visitors: count,
-      fill: colors[status] ?? (isDark ? "#5c5e62" : "#94a3b8"),
-    }))
-  }, [stations, isDark])
-
   // Session duration histogram (completed sessions only)
   const durationHistogram = useMemo(() => {
     const buckets = [
@@ -150,7 +128,7 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       />
 
       {/* Daily Energy */}
-      <Card className="border-none shadow-none">
+      <Card className="border">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("energyLast7Days")}
@@ -170,7 +148,7 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       </Card>
 
       {/* Top 3 Stations */}
-      <Card className="border-none shadow-none">
+      <Card className="border">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("topStations")}
@@ -202,7 +180,7 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       </Card>
 
       {/* AC vs DC */}
-      <Card className="border-none shadow-none">
+      <Card className="border">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("acVsDc")}
@@ -226,7 +204,7 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       </Card>
 
       {/* Uptime radial pills */}
-      <Card className="border-none shadow-none">
+      <Card className="border">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("uptime")}
@@ -241,8 +219,8 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
                 const fillColor = st.uptime >= 90
                   ? accent
                   : st.uptime >= 70
-                  ? "#38bdf8"
-                  : destructive
+                  ? primary
+                  : "#1e40af"
                 return (
                   <Card key={st.id} className="flex flex-col items-center border p-3">
                     <span className="mb-1 text-[10px] font-medium text-muted-foreground">{st.id}</span>
@@ -293,32 +271,8 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
         </CardContent>
       </Card>
 
-      {/* Station Status Distribution - Radial Grid */}
-      <Card className="border-none shadow-none">
-        <CardContent className="p-4">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("stationStatus")}
-          </h3>
-          {statusDistribution.length === 0 ? (
-            <div className="flex h-[180px] items-center justify-center rounded-lg border border-dashed text-xs text-muted-foreground">
-              {t("noStationsConnected")}
-            </div>
-          ) : (
-            <div className="h-[180px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <RadialBarChart data={statusDistribution} innerRadius="20%" outerRadius="90%">
-                  <PolarGrid gridType="circle" stroke={gridStroke} />
-                  <RadialBar dataKey="visitors" />
-                  <Tooltip contentStyle={tooltipStyle} />
-                </RadialBarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Session Duration Histogram */}
-      <Card className="border-none shadow-none">
+      <Card className="border">
         <CardContent className="p-4">
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {t("sessionDuration")}

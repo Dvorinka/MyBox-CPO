@@ -44,6 +44,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | null>(null)
   const [chartReadyFor, setChartReadyFor] = useState<string | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
+  const [activeTab, setActiveTab] = useState("overview")
   const chartContainerRef = useRef<HTMLDivElement | null>(null)
   const stationID = station?.id ?? null
 
@@ -86,6 +87,16 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
     observer.observe(element)
     return () => observer.disconnect()
   }, [open, chartReady])
+
+  useEffect(() => {
+    if (activeTab !== "overview" || !chartContainerRef.current) return
+    const updateWidth = () => {
+      if (!chartContainerRef.current) return
+      setChartWidth(Math.max(0, Math.floor(chartContainerRef.current.getBoundingClientRect().width)))
+    }
+    const timer = setTimeout(updateWidth, 50)
+    return () => clearTimeout(timer)
+  }, [activeTab])
 
   const handleStart = async () => {
     if (!station) return
@@ -144,7 +155,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
               </DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue="overview" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="overview">{t("overview")}</TabsTrigger>
                 <TabsTrigger value="sessions">{t("sessions")}</TabsTrigger>

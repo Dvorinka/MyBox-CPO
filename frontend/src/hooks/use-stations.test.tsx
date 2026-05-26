@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { renderHook, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { StationsProvider, useStations } from "./use-stations"
+import { I18nProvider } from "@/components/i18n-provider"
 
 vi.mock("@/lib/api", async () => {
   const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api")
@@ -33,7 +34,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
   })
   return (
     <QueryClientProvider client={queryClient}>
-      <StationsProvider>{children}</StationsProvider>
+      <I18nProvider>
+        <StationsProvider>{children}</StationsProvider>
+      </I18nProvider>
     </QueryClientProvider>
   )
 }

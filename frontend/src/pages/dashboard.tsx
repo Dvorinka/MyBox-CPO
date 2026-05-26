@@ -12,7 +12,7 @@ import { api } from "@/lib/api"
 import { statusVariant, statusDotColor } from "@/lib/status"
 import ChargingHeatmap from "@/components/charging-heatmap"
 import Analytics from "@/components/analytics"
-import { Map, MapMarker, MarkerContent, MarkerTooltip, MapPopup } from "@/components/ui/map"
+import { Map, MapMarker, MarkerContent, MarkerTooltip, MapPopup, MapControls, type MapViewport } from "@/components/ui/map"
 import { cn, getStationLocation } from "@/lib/utils"
 import {
   Zap,
@@ -175,73 +175,28 @@ export default function Dashboard() {
         </div>
 
         {/* Heatmap sidebar — 1/3 on desktop */}
-        <div>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("chargingActivity")}
-          </h2>
-          {sessionsLoading ? (
-            <Skeleton className="h-[180px] w-full rounded-xl" />
-          ) : (
-            <div className="rounded-xl border p-4">
-              <ChargingHeatmap sessions={allSessions} />
-            </div>
-          )}
-        </div>
-      </div>
+        <div className="space-y-6">
+          <div>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("chargingActivity")}
+            </h2>
+            {sessionsLoading ? (
+              <Skeleton className="h-[180px] w-full rounded-xl" />
+            ) : (
+              <div className="rounded-xl border p-4">
+                <ChargingHeatmap sessions={allSessions} />
+              </div>
+            )}
+          </div>
 
-      {/* Fleet Map */}
-      <div>
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          <MapPin className="h-3.5 w-3.5" />
-          {t("fleetMap")}
-        </h2>
-        <div className="h-[320px] w-full overflow-hidden rounded-xl border">
-          <Map center={[14.4378, 50.0755]} zoom={11}>
-            {stations.map((station) => {
-              const loc = getStationLocation(station.id)
-              return (
-                <MapMarker
-                  key={station.id}
-                  longitude={loc.longitude}
-                  latitude={loc.latitude}
-                >
-                  <MarkerContent>
-                    <button
-                      onClick={() => openDetail(station)}
-                      className={cn(
-                        "size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
-                        station.status === "Faulted"
-                          ? "bg-red-500"
-                          : station.status === "Charging"
-                          ? "bg-primary"
-                          : "bg-accent"
-                      )}
-                    />
-                  </MarkerContent>
-                  <MarkerTooltip>{station.id}</MarkerTooltip>
-                  <MapPopup
-                    longitude={loc.longitude}
-                    latitude={loc.latitude}
-                  >
-                    <div className="space-y-1">
-                      <p className="text-foreground font-medium">{station.id}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {station.status} · {station.current_power_kw.toFixed(1)} kW
-                      </p>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="mt-1 w-full text-xs"
-                        onClick={() => openDetail(station)}
-                      >
-                        {t("details")}
-                      </Button>
-                    </div>
-                  </MapPopup>
-                </MapMarker>
-              )
-            })}
-          </Map>
+          {/* Fleet Map */}
+          <div>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" />
+              {t("fleetMap")}
+            </h2>
+            <FleetMap stations={stations} onOpenDetail={openDetail} />
+          </div>
         </div>
       </div>
 
@@ -255,6 +210,104 @@ export default function Dashboard() {
           onOpenChange={setDetailOpen}
         />
       </Suspense>
+    </div>
+  )
+}
+
+function FleetMap({
+  stations,
+  onOpenDetail,
+}: {
+  stations: Station[]
+  onOpenDetail: (station: Station) => void
+}) {
+  const { t } = useI18n()
+  const [viewport, setViewport] = useState<MapViewport>({
+    center: [14.4378, 50.0755],
+    zoom: 11,
+    bearing: 0,
+    pitch: 0,
+  })
+
+  return (
+    <div className="relative h-[320px] w-full overflow-hidden rounded-xl border">
+      <Map viewport={viewport} onViewportChange={setViewport}>
+        <MapControls
+          position="top-right"
+          showZoom
+          showCompass
+          showLocate
+          showFullscreen
+        />
+        {stations.map((station) => {
+          const loc = getStationLocation(station.id)
+          const isCharging = station.status === "Charging"
+          return (
+            <MapMarker
+              key={station.id}
+              longitude={loc.longitude}
+              latitude={loc.latitude}
+            >
+              <MarkerContent>
+                <button
+                  onClick={() => onOpenDetail(station)}
+                  className={cn(
+                    "relative size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
+                    station.status === "Faulted"
+                      ? "bg-red-500"
+                      : isCharging
+                      ? "bg-primary"
+                      : "bg-accent"
+                  )}
+                >
+                  {isCharging && (
+                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/60" />
+                  )}
+                </button>
+              </MarkerContent>
+              <MarkerTooltip>{station.id}</MarkerTooltip>
+              <MapPopup longitude={loc.longitude} latitude={loc.latitude}>
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">{station.id}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {station.status} · {station.current_power_kw.toFixed(1)} kW
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1 w-full text-xs"
+                    onClick={() => onOpenDetail(station)}
+                  >
+                    {t("details")}
+                  </Button>
+                </div>
+              </MapPopup>
+            </MapMarker>
+          )
+        })}
+      </Map>
+      <div className="absolute bottom-2 left-2 z-10 flex flex-wrap gap-x-3 gap-y-1 rounded border bg-background/80 px-2 py-1.5 font-mono text-xs backdrop-blur">
+        <span>
+          <span className="text-muted-foreground">lng:</span>{" "}
+          {viewport.center[0].toFixed(4)}
+        </span>
+        <span>
+          <span className="text-muted-foreground">lat:</span>{" "}
+          {viewport.center[1].toFixed(4)}
+        </span>
+        <span>
+          <span className="text-muted-foreground">zoom:</span>{" "}
+          {viewport.zoom.toFixed(1)}
+        </span>
+        <span>
+          <span className="text-muted-foreground">bearing:</span>{" "}
+          {(viewport.bearing ?? 0).toFixed(1)}°
+        </span>
+        <span>
+          <span className="text-muted-foreground">pitch:</span>{" "}
+          {(viewport.pitch ?? 0).toFixed(1)}°
+        </span>
+      </div>
     </div>
   )
 }
