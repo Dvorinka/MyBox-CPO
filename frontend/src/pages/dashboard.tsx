@@ -1,4 +1,4 @@
-import { useState, useMemo, lazy, Suspense } from "react"
+import { useState, useMemo, useCallback, memo, lazy, Suspense } from "react"
 import { format } from "date-fns"
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent } from "@/components/ui/card"
@@ -86,10 +86,10 @@ export default function Dashboard() {
     [selectedStationId, stations]
   )
 
-  const openDetail = (station: Station) => {
+  const openDetail = useCallback((station: Station) => {
     setSelectedStationId(station.id)
     setDetailOpen(true)
-  }
+  }, [])
 
   const handleStart = async (id: string) => {
     setActionLoading((prev) => ({ ...prev, [id]: "start" }))
@@ -230,7 +230,7 @@ export default function Dashboard() {
       </Suspense>
     </div>
   )
-
+}
 
 function getViewportForStations(stations: Station[]): MapViewport {
   if (stations.length === 0) {
@@ -252,6 +252,87 @@ function getViewportForStations(stations: Station[]): MapViewport {
   return { center, zoom, bearing: 0, pitch: 0 }
 }
 
+function FleetMapViewBase({
+  stations,
+  onOpenDetail,
+}: {
+  stations: Station[]
+  onOpenDetail: (station: Station) => void
+}) {
+  const { t } = useI18n()
+  const initialViewport = useMemo(() => getViewportForStations(stations), [stations])
+  const [viewport, setViewport] = useState<MapViewport>(initialViewport)
+
+  const handleOpenDetail = useCallback((station: Station) => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen()
+    }
+    onOpenDetail(station)
+  }, [onOpenDetail])
+
+  return (
+    <div className="relative h-[320px] w-full overflow-hidden rounded-xl border">
+      <Map viewport={viewport} onViewportChange={setViewport}>
+        <MapControls
+          position="top-right"
+          showZoom
+          showCompass
+          showLocate
+          showFullscreen
+        />
+        {stations.map((station) => {
+          const loc = getStationLocation(station.id)
+          const isCharging = station.status === "Charging"
+          return (
+            <MapMarker
+              key={station.id}
+              longitude={loc.longitude}
+              latitude={loc.latitude}
+            >
+              <MarkerContent>
+                <button
+                  onClick={() => handleOpenDetail(station)}
+                  className={cn(
+                    "relative size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
+                    station.status === "Faulted"
+                      ? "bg-red-500"
+                      : isCharging
+                      ? "bg-primary"
+                      : "bg-accent"
+                  )}
+                >
+                  {isCharging && (
+                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/60" />
+                  )}
+                </button>
+              </MarkerContent>
+              <MarkerTooltip>{station.id}</MarkerTooltip>
+              <MapPopup longitude={loc.longitude} latitude={loc.latitude}>
+                <div className="space-y-1">
+                  <p className="font-medium text-foreground">{station.id}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {station.status} · {station.current_power_kw.toFixed(1)} kW
+                  </p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-1 w-full text-xs"
+                    onClick={() => handleOpenDetail(station)}
+                  >
+                    {t("details")}
+                  </Button>
+                </div>
+              </MapPopup>
+            </MapMarker>
+          )
+        })}
+      </Map>
+    </div>
+  )
+}
+
+const FleetMapView = memo(FleetMapViewBase)
+
 function FleetMap({
   stations,
   sessions,
@@ -261,77 +342,9 @@ function FleetMap({
   sessions: ChargingSession[]
   onOpenDetail: (station: Station) => void
 }) {
-  const { t } = useI18n()
-  const initialViewport = useMemo(() => getViewportForStations(stations), [stations])
-  const [viewport, setViewport] = useState<MapViewport>(initialViewport)
-
-  const handleOpenDetail = (station: Station) => {
-    if (document.fullscreenElement) {
-      void document.exitFullscreen()
-    }
-    onOpenDetail(station)
-  }
-
   return (
     <div className="space-y-4">
-      <div className="relative h-[320px] w-full overflow-hidden rounded-xl border">
-        <Map viewport={viewport} onViewportChange={setViewport}>
-          <MapControls
-            position="top-right"
-            showZoom
-            showCompass
-            showLocate
-            showFullscreen
-          />
-          {stations.map((station) => {
-            const loc = getStationLocation(station.id)
-            const isCharging = station.status === "Charging"
-            return (
-              <MapMarker
-                key={station.id}
-                longitude={loc.longitude}
-                latitude={loc.latitude}
-              >
-                <MarkerContent>
-                  <button
-                    onClick={() => handleOpenDetail(station)}
-                    className={cn(
-                      "relative size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
-                      station.status === "Faulted"
-                        ? "bg-red-500"
-                        : isCharging
-                        ? "bg-primary"
-                        : "bg-accent"
-                    )}
-                  >
-                    {isCharging && (
-                      <span className="absolute inset-0 animate-ping rounded-full bg-primary/60" />
-                    )}
-                  </button>
-                </MarkerContent>
-                <MarkerTooltip>{station.id}</MarkerTooltip>
-                <MapPopup longitude={loc.longitude} latitude={loc.latitude}>
-                  <div className="space-y-1">
-                    <p className="font-medium text-foreground">{station.id}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {station.status} · {station.current_power_kw.toFixed(1)} kW
-                    </p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-1 w-full text-xs"
-                      onClick={() => handleOpenDetail(station)}
-                    >
-                      {t("details")}
-                    </Button>
-                  </div>
-                </MapPopup>
-              </MapMarker>
-            )
-          })}
-        </Map>
-      </div>
-
+      <FleetMapView stations={stations} onOpenDetail={onOpenDetail} />
       <FinishedSessionsList sessions={sessions} stations={stations} onOpenDetail={onOpenDetail} />
     </div>
   )
@@ -620,4 +633,4 @@ function StationCard({
       </CardContent>
     </Card>
   )
-}}
+}
