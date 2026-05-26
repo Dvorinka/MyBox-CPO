@@ -48,7 +48,7 @@ services:
       PEAK_START_HOUR: "7"
       PEAK_END_HOUR: "21"
       OFFLINE_AFTER_SECONDS: "90"
-      CORS_ALLOWED_ORIGINS: "*"
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173"
       JWT_SECRET: "demo-secret-change-in-production"
     ports:
       - "8080:8080"

@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   BarChart,
   Bar,
@@ -17,6 +17,9 @@ import {
 import { Card, CardContent } from "@/components/ui/card"
 import type { ChargingSession, Station } from "@/types"
 import { useI18n } from "@/lib/i18n"
+import { useChartTheme } from "@/hooks/use-chart-theme"
+import RevenueWidget from "@/components/revenue-widget"
+import RevenueDetail from "@/components/revenue-detail"
 
 interface AnalyticsProps {
   sessions: ChargingSession[]
@@ -25,6 +28,7 @@ interface AnalyticsProps {
 
 export default function Analytics({ sessions, stations }: AnalyticsProps) {
   const { t } = useI18n()
+  const { gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
 
   // Top 3 stations by total energy delivered
   const topStations = useMemo(() => {
@@ -53,10 +57,10 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       }
     })
     return [
-      { name: "AC", value: Number(acEnergy.toFixed(2)), fill: "#2596be" },
-      { name: "DC", value: Number(dcEnergy.toFixed(2)), fill: "#102472" },
+      { name: "AC", value: Number(acEnergy.toFixed(2)), fill: accent },
+      { name: "DC", value: Number(dcEnergy.toFixed(2)), fill: primary },
     ]
-  }, [sessions, stations])
+  }, [sessions, stations, isDark])
 
   // Daily energy (last 7 days)
   const dailyEnergy = useMemo(() => {
@@ -86,7 +90,7 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       const total = stSessions.length
       const completed = stSessions.filter((s) => s.end_time !== null).length
       const uptime = total > 0 ? Math.round((completed / total) * 100) : 100
-      return { id: st.id, uptime, fill: "#2596be" }
+      return { id: st.id, uptime }
     })
   }, [stations, sessions])
 
@@ -97,19 +101,19 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
       counts[s.status] = (counts[s.status] ?? 0) + 1
     })
     const colors: Record<string, string> = {
-      Available: "var(--chart-1)",
-      Charging: "var(--chart-2)",
-      Preparing: "var(--chart-3)",
-      Faulted: "var(--color-destructive)",
-      Offline: "var(--chart-5)",
-      Finishing: "var(--chart-4)",
+      Available: isDark ? "#3b82f6" : "var(--chart-1)",
+      Charging: isDark ? "#2596be" : "var(--chart-2)",
+      Preparing: isDark ? "#38bdf8" : "var(--chart-3)",
+      Faulted: isDark ? "#ef4444" : "var(--color-destructive)",
+      Offline: isDark ? "#5c5e62" : "var(--chart-5)",
+      Finishing: isDark ? "#8e8e8e" : "var(--chart-4)",
     }
     return Object.entries(counts).map(([status, count]) => ({
       name: status,
       visitors: count,
-      fill: colors[status] ?? "#94a3b8",
+      fill: colors[status] ?? (isDark ? "#5c5e62" : "#94a3b8"),
     }))
-  }, [stations])
+  }, [stations, isDark])
 
   // Session duration histogram (completed sessions only)
   const durationHistogram = useMemo(() => {
@@ -134,8 +138,17 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
     return buckets.map((b, i) => ({ label: b.label, count: counts[i] }))
   }, [sessions])
 
+  const [revenueDetailOpen, setRevenueDetailOpen] = useState(false)
+
   return (
     <div className="grid gap-4 md:grid-cols-2">
+      {/* Revenue by Station */}
+      <RevenueWidget
+        sessions={sessions}
+        stations={stations}
+        onClick={() => setRevenueDetailOpen(true)}
+      />
+
       {/* Daily Energy */}
       <Card className="border-none shadow-none">
         <CardContent className="p-4">
@@ -145,13 +158,11 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
           <div className="h-[180px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={dailyEnergy} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} unit=" kWh" />
-                <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
-                />
-                <Bar dataKey="kwh" fill="#2596be" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: tickFill }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: tickFill }} tickLine={false} axisLine={false} unit=" kWh" />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="kwh" fill={accent} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -172,19 +183,17 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
             <div className="h-[180px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={topStations} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} vertical={false} />
                   <XAxis
                     dataKey="id"
-                    tick={{ fontSize: 10, fill: "#64748b" }}
+                    tick={{ fontSize: 10, fill: tickFill }}
                     tickLine={false}
                     axisLine={false}
                     interval={0}
                   />
-                  <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} unit=" kWh" />
-                  <Tooltip
-                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
-                  />
-                  <Bar dataKey="kwh" fill="#102472" radius={[4, 4, 0, 0]} />
+                  <YAxis tick={{ fontSize: 10, fill: tickFill }} tickLine={false} axisLine={false} unit=" kWh" />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="kwh" fill={primary} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -201,12 +210,10 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
           <div className="h-[180px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={acDcData} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#64748b" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} unit=" kWh" />
-                <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
-                />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: tickFill }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: tickFill }} tickLine={false} axisLine={false} unit=" kWh" />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {acDcData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
@@ -230,50 +237,57 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3">
-              {uptimeStats.map((st) => (
-                <Card key={st.id} className="flex flex-col items-center border p-3">
-                  <span className="mb-1 text-[10px] font-medium text-muted-foreground">{st.id}</span>
-                  <div className="h-[80px] w-[80px]">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RadialBarChart
-                        data={[{ name: st.id, uptime: st.uptime, fill: st.uptime >= 90 ? "#2596be" : st.uptime >= 70 ? "#38bdf8" : "#ef4444" }]}
-                        innerRadius="65%"
-                        outerRadius="100%"
-                        startAngle={90}
-                        endAngle={-270}
-                      >
-                        <RadialBar
-                          background
-                          dataKey="uptime"
-                          cornerRadius={4}
-                          fill={st.uptime >= 90 ? "#2596be" : st.uptime >= 70 ? "#38bdf8" : "#ef4444"}
-                        />
-                        <PolarRadiusAxis tick={false} axisLine={false}>
-                          <Label
-                            content={({ viewBox }) => {
-                              if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                                return (
-                                  <text
-                                    x={viewBox.cx}
-                                    y={viewBox.cy}
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                  >
-                                    <tspan className="fill-foreground text-sm font-bold">
-                                      {st.uptime}%
-                                    </tspan>
-                                  </text>
-                                )
-                              }
-                              return null
-                            }}
+              {uptimeStats.map((st) => {
+                const fillColor = st.uptime >= 90
+                  ? accent
+                  : st.uptime >= 70
+                  ? "#38bdf8"
+                  : destructive
+                return (
+                  <Card key={st.id} className="flex flex-col items-center border p-3">
+                    <span className="mb-1 text-[10px] font-medium text-muted-foreground">{st.id}</span>
+                    <div className="h-[80px] w-[80px]">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <RadialBarChart
+                          data={[{ name: st.id, uptime: st.uptime, fill: fillColor }]}
+                          innerRadius="65%"
+                          outerRadius="100%"
+                          startAngle={90}
+                          endAngle={-270}
+                        >
+                          <RadialBar
+                            background
+                            dataKey="uptime"
+                            cornerRadius={4}
+                            fill={fillColor}
                           />
-                        </PolarRadiusAxis>
-                      </RadialBarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </Card>
-              ))}
+                          <PolarRadiusAxis tick={false} axisLine={false}>
+                            <Label
+                              content={({ viewBox }) => {
+                                if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                                  return (
+                                    <text
+                                      x={viewBox.cx}
+                                      y={viewBox.cy}
+                                      textAnchor="middle"
+                                      dominantBaseline="middle"
+                                    >
+                                      <tspan className="fill-foreground text-sm font-bold">
+                                        {st.uptime}%
+                                      </tspan>
+                                    </text>
+                                  )
+                                }
+                                return null
+                              }}
+                            />
+                          </PolarRadiusAxis>
+                        </RadialBarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </Card>
+                )
+              })}
             </div>
           )}
         </CardContent>
@@ -293,11 +307,9 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
             <div className="h-[180px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <RadialBarChart data={statusDistribution} innerRadius="20%" outerRadius="90%">
-                  <PolarGrid gridType="circle" />
+                  <PolarGrid gridType="circle" stroke={gridStroke} />
                   <RadialBar dataKey="visitors" />
-                  <Tooltip
-                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
-                  />
+                  <Tooltip contentStyle={tooltipStyle} />
                 </RadialBarChart>
               </ResponsiveContainer>
             </div>
@@ -314,18 +326,23 @@ export default function Analytics({ sessions, stations }: AnalyticsProps) {
           <div className="h-[180px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={durationHistogram} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="label" tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "#64748b" }} tickLine={false} axisLine={false} allowDecimals={false} />
-                <Tooltip
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "none" }}
-                />
-                <Bar dataKey="count" fill="#102472" radius={[4, 4, 0, 0]} />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="label" tick={{ fontSize: 10, fill: tickFill }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: tickFill }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="count" fill={primary} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </CardContent>
       </Card>
+
+      <RevenueDetail
+        sessions={sessions}
+        stations={stations}
+        open={revenueDetailOpen}
+        onOpenChange={setRevenueDetailOpen}
+      />
     </div>
   )
 }

@@ -25,6 +25,10 @@ type Config struct {
 }
 
 func Load() Config {
+	secret := env("JWT_SECRET", "")
+	if secret == "" {
+		panic("JWT_SECRET environment variable is required")
+	}
 	return Config{
 		HTTPAddr:           env("HTTP_ADDR", ":8080"),
 		DatabaseURL:        env("DATABASE_URL", "postgres://cpo:cpo@localhost:5432/cpo?sslmode=disable"),
@@ -38,8 +42,8 @@ func Load() Config {
 		PeakStartHour:      envInt("PEAK_START_HOUR", 7),
 		PeakEndHour:        envInt("PEAK_END_HOUR", 21),
 		OfflineAfter:       time.Duration(envInt("OFFLINE_AFTER_SECONDS", 90)) * time.Second,
-		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS", "*"),
-		JWTSecret:          env("JWT_SECRET", "change-me-in-production"),
+		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS", "http://localhost:5173"),
+		JWTSecret:          secret,
 	}
 }
 

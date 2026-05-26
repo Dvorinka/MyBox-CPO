@@ -1,5 +1,7 @@
 import { useMemo } from "react"
 import type { ChargingSession } from "@/types"
+import { useIsDark } from "@/hooks/use-is-dark"
+import { cn } from "@/lib/utils"
 
 interface ChargingHeatmapProps {
   sessions: ChargingSession[]
@@ -21,6 +23,8 @@ function getHourBucket(hour: number): number {
 }
 
 export default function ChargingHeatmap({ sessions }: ChargingHeatmapProps) {
+  const isDark = useIsDark()
+
   const { grid, maxValue } = useMemo(() => {
     const grid: number[][] = Array.from({ length: 7 }, () =>
       Array.from({ length: 8 }, () => 0)
@@ -41,13 +45,13 @@ export default function ChargingHeatmap({ sessions }: ChargingHeatmapProps) {
   }, [sessions])
 
   const intensityColor = (value: number): string => {
-    if (value === 0) return "bg-slate-100"
+    if (value === 0) return isDark ? "bg-muted" : "bg-slate-100"
     const t = value / maxValue
     if (t < 0.2) return "bg-[#2596be]/15"
     if (t < 0.4) return "bg-[#2596be]/30"
     if (t < 0.6) return "bg-[#2596be]/50"
     if (t < 0.8) return "bg-[#2596be]/70"
-    return "bg-[#102472]"
+    return isDark ? "bg-[#3b82f6]" : "bg-[#102472]"
   }
 
   if (sessions.length === 0) {
@@ -88,9 +92,10 @@ export default function ChargingHeatmap({ sessions }: ChargingHeatmapProps) {
                 return (
                   <div
                     key={hourIdx}
-                    className={`h-5 w-full rounded-[2px] transition-colors duration-300 ${intensityColor(
-                      value
-                    )}`}
+                    className={cn(
+                      "h-5 w-full rounded-[2px] transition-colors duration-300",
+                      intensityColor(value)
+                    )}
                     title={`${day} ${String(HOURS[hourIdx]).padStart(
                       2,
                       "0"
@@ -107,11 +112,15 @@ export default function ChargingHeatmap({ sessions }: ChargingHeatmapProps) {
       <div className="mt-2 flex items-center justify-end gap-1.5">
         <span className="text-[9px] text-muted-foreground">Méně</span>
         <div className="flex gap-[2px]">
-          {["bg-slate-100", "bg-[#2596be]/20", "bg-[#2596be]/40", "bg-[#2596be]/60", "bg-[#102472]"].map(
-            (c, i) => (
-              <div key={i} className={`h-2.5 w-2.5 rounded-[1px] ${c}`} />
-            )
-          )}
+          {[
+            isDark ? "bg-muted" : "bg-slate-100",
+            "bg-[#2596be]/20",
+            "bg-[#2596be]/40",
+            "bg-[#2596be]/60",
+            isDark ? "bg-[#3b82f6]" : "bg-[#102472]",
+          ].map((c, i) => (
+            <div key={i} className={cn("h-2.5 w-2.5 rounded-[1px]", c)} />
+          ))}
         </div>
         <span className="text-[9px] text-muted-foreground">Více</span>
       </div>

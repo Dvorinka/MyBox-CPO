@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Routes, Route } from "react-router-dom"
 import { Toaster } from "sonner"
 import Layout from "@/components/layout"
@@ -14,6 +14,14 @@ function App() {
     api.logout()
     setAuthenticated(false)
   }
+
+  useEffect(() => {
+    const onExpired = () => {
+      setAuthenticated(false)
+    }
+    window.addEventListener("mybox:auth:expired", onExpired)
+    return () => window.removeEventListener("mybox:auth:expired", onExpired)
+  }, [])
 
   return (
     <Layout onLogout={authenticated ? handleLogout : undefined}>

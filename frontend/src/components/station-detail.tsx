@@ -27,6 +27,7 @@ import { statusVariant } from "@/lib/status"
 import { useI18n } from "@/lib/i18n"
 import { Power, Battery, CreditCard, Play, Square, MapPin, AlertTriangle } from "lucide-react"
 import { useStations } from "@/hooks/use-stations"
+import { useChartTheme } from "@/hooks/use-chart-theme"
 import { cn, getStationLocation } from "@/lib/utils"
 import { Map, MapMarker, MarkerContent, MarkerTooltip } from "@/components/ui/map"
 
@@ -39,6 +40,7 @@ interface StationDetailProps {
 export default function StationDetail({ station, open, onOpenChange }: StationDetailProps) {
   const { t } = useI18n()
   const { startCharging, stopCharging } = useStations()
+  const { isDark, gridStroke, tickFill, tooltipStyle } = useChartTheme()
   const [actionLoading, setActionLoading] = useState<"start" | "stop" | null>(null)
   const [chartReadyFor, setChartReadyFor] = useState<string | null>(null)
   const [chartWidth, setChartWidth] = useState(0)
@@ -114,6 +116,11 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
   const canStart = station?.status === "Available"
   const canStop = station?.status === "Charging" || station?.status === "Preparing"
 
+  const powerStroke = isDark ? "#38bdf8" : "#2596be"
+  const energyStroke = isDark ? "#3b82f6" : "#102472"
+  const powerGradientId = `powerGradient-${stationID ?? "default"}`
+  const energyGradientId = `energyGradient-${stationID ?? "default"}`
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
@@ -147,17 +154,17 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                 {/* Metrics */}
                 <div className="grid grid-cols-3 gap-4">
                   <MetricCard
-                    icon={<Power className="h-4 w-4 text-[#2596be]" />}
+                    icon={<Power className="h-4 w-4 text-accent" />}
                     label={t("currentPower")}
                     value={`${station.current_power_kw.toFixed(2)} kW`}
                   />
                   <MetricCard
-                    icon={<Battery className="h-4 w-4 text-[#2596be]" />}
+                    icon={<Battery className="h-4 w-4 text-accent" />}
                     label={t("totalEnergy")}
                     value={`${(station.current_meter_wh / 1000).toFixed(2)} kWh`}
                   />
                   <MetricCard
-                    icon={<CreditCard className="h-4 w-4 text-[#2596be]" />}
+                    icon={<CreditCard className="h-4 w-4 text-accent" />}
                     label={t("activeTransaction")}
                     value={station.active_transaction_id ?? t("none")}
                     small
@@ -185,25 +192,25 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                           margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
                         >
                           <defs>
-                            <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#2596be" stopOpacity={0.2} />
-                              <stop offset="95%" stopColor="#2596be" stopOpacity={0} />
+                            <linearGradient id={powerGradientId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={powerStroke} stopOpacity={0.2} />
+                              <stop offset="95%" stopColor={powerStroke} stopOpacity={0} />
                             </linearGradient>
-                            <linearGradient id="energyGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#102472" stopOpacity={0.14} />
-                              <stop offset="95%" stopColor="#102472" stopOpacity={0} />
+                            <linearGradient id={energyGradientId} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={energyStroke} stopOpacity={0.14} />
+                              <stop offset="95%" stopColor={energyStroke} stopOpacity={0} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
                           <XAxis
                             dataKey="time"
-                            tick={{ fontSize: 11, fill: "#64748b" }}
+                            tick={{ fontSize: 11, fill: tickFill }}
                             tickLine={false}
-                            axisLine={{ stroke: "#e2e8f0" }}
+                            axisLine={{ stroke: gridStroke }}
                           />
                           <YAxis
                             yAxisId="power"
-                            tick={{ fontSize: 11, fill: "#64748b" }}
+                            tick={{ fontSize: 11, fill: tickFill }}
                             tickLine={false}
                             axisLine={false}
                             unit=" kW"
@@ -211,7 +218,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                           <YAxis
                             yAxisId="energy"
                             orientation="right"
-                            tick={{ fontSize: 11, fill: "#64748b" }}
+                            tick={{ fontSize: 11, fill: tickFill }}
                             tickLine={false}
                             axisLine={false}
                             unit=" kWh"
@@ -222,19 +229,15 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                               const unit = name === "power" ? "kW" : "kWh"
                               return [`${Number(value).toFixed(2)} ${unit}`, label]
                             }}
-                            contentStyle={{
-                              borderRadius: "8px",
-                              border: "1px solid #e2e8f0",
-                              boxShadow: "none",
-                            }}
+                            contentStyle={tooltipStyle}
                           />
                           <Area
                             yAxisId="energy"
                             type="monotone"
                             dataKey="energy"
-                            stroke="#102472"
+                            stroke={energyStroke}
                             strokeWidth={2}
-                            fill="url(#energyGradient)"
+                            fill={`url(#${energyGradientId})`}
                             dot={false}
                             isAnimationActive={true}
                             animationDuration={700}
@@ -244,9 +247,9 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                             yAxisId="power"
                             type="monotone"
                             dataKey="power"
-                            stroke="#2596be"
+                            stroke={powerStroke}
                             strokeWidth={2}
-                            fill="url(#powerGradient)"
+                            fill={`url(#${powerGradientId})`}
                             dot={false}
                             isAnimationActive={true}
                             animationDuration={700}
@@ -282,8 +285,8 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                           <MarkerContent>
                             <div
                               className={cn(
-                                "size-5 rounded-full border-2 border-white shadow-lg",
-                                station.status === "Faulted" ? "bg-red-500" : "bg-[#102472]"
+                                "size-5 rounded-full border-2 border-background shadow-lg",
+                                station.status === "Faulted" ? "bg-red-500" : "bg-primary"
                               )}
                             />
                           </MarkerContent>
@@ -296,11 +299,11 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
 
                 {/* Fault alert */}
                 {station.status === "Faulted" && (
-                  <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                  <div className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive dark:border-destructive/20 dark:bg-destructive/10 dark:text-red-400">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <div>
                       <p className="font-medium">{t("stationFaulted")}</p>
-                      <p className="mt-0.5 text-red-600/80">{t("stationFaultedDesc")}</p>
+                      <p className="mt-0.5 text-destructive/80 dark:text-red-400/80">{t("stationFaultedDesc")}</p>
                     </div>
                   </div>
                 )}
@@ -310,7 +313,7 @@ export default function StationDetail({ station, open, onOpenChange }: StationDe
                   <Button
                     onClick={handleStart}
                     disabled={!canStart || actionLoading !== null}
-                    className="flex-1 bg-[#102472] hover:bg-[#102472]/90"
+                    className="flex-1"
                   >
                     <Play className="mr-2 h-4 w-4" />
                     {actionLoading === "start" ? t("starting") : t("startCharging")}

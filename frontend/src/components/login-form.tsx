@@ -29,32 +29,34 @@ export default function LoginForm({ onLogin }: LoginFormProps) {
   }
 
   return (
-    <div className="mx-auto mt-20 max-w-sm rounded-xl border border-border/60 bg-white p-6 shadow-sm">
-      <h2 className="mb-1 text-xl font-semibold tracking-tight text-[#102472]">{t("login")}</h2>
+    <div className="mx-auto mt-20 max-w-sm rounded-xl border border-border/60 bg-card p-6 shadow-sm">
+      <h2 className="mb-1 text-xl font-semibold tracking-tight text-primary">{t("login")}</h2>
       <p className="mb-6 text-xs text-muted-foreground">{t("demoCredentials")}</p>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">{t("username")}</label>
+          <label htmlFor="username" className="mb-1 block text-xs font-medium text-muted-foreground">{t("username")}</label>
           <input
+            id="username"
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-[#2596be] focus:ring-1 focus:ring-[#2596be]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
             required
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">{t("password")}</label>
+          <label htmlFor="password" className="mb-1 block text-xs font-medium text-muted-foreground">{t("password")}</label>
           <input
+            id="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-[#2596be] focus:ring-1 focus:ring-[#2596be]"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-ring focus:ring-1 focus:ring-ring"
             required
           />
         </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <Button type="submit" disabled={loading} className="w-full bg-[#102472] hover:bg-[#102472]/90">
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        <Button type="submit" disabled={loading} className="w-full">
           {loading ? "..." : t("login")}
         </Button>
       </form>

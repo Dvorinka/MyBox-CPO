@@ -3,6 +3,15 @@ import type { Station, ChargingSession, MeterValue, StartResponse, StopResponse 
 const API_BASE = "/api"
 const TOKEN_KEY = "mybox_token"
 
+export interface PricingSettings {
+  peak_price_per_kwh: number
+  offpeak_price_per_kwh: number
+  peak_start_hour: number
+  peak_end_hour: number
+  dc_multiplier: number
+  updated_at: string
+}
+
 function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY)
   if (token) {
@@ -13,6 +22,10 @@ function getAuthHeaders(): Record<string, string> {
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      localStorage.removeItem(TOKEN_KEY)
+      window.dispatchEvent(new Event("mybox:auth:expired"))
+    }
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `HTTP ${res.status}`)
   }
@@ -63,6 +76,16 @@ export const api = {
     fetch(`${API_BASE}/stations/${id}/stop`, { method: "POST", headers: getAuthHeaders() }).then((r) =>
       handleResponse<StopResponse>(r)
     ),
+
+  getPricing: (): Promise<PricingSettings> =>
+    fetch(`${API_BASE}/pricing`, { headers: getAuthHeaders() }).then((r) => handleResponse<PricingSettings>(r)),
+
+  setPricing: (settings: Omit<PricingSettings, "updated_at">): Promise<{ status: string }> =>
+    fetch(`${API_BASE}/pricing`, {
+      method: "PUT",
+      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    }).then((r) => handleResponse<{ status: string }>(r)),
 }
 
 export function subscribeEvents(onEvent: (type: string, data: unknown) => void) {
