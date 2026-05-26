@@ -399,9 +399,6 @@ function FinishedSessionsList({
                     className="border-b transition-colors hover:bg-muted/50 last:border-b-0 cursor-pointer"
                   >
                     <td className="px-3 py-2 whitespace-nowrap text-xs">
-                      {format(new Date(session.start_time), "MMM d, HH:mm")}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">
                       {session.end_time ? format(new Date(session.end_time), "MMM d, HH:mm") : "—"}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap text-right text-xs tabular-nums">
