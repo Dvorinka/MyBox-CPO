@@ -48,8 +48,9 @@ services:
       PEAK_START_HOUR: "7"
       PEAK_END_HOUR: "21"
       OFFLINE_AFTER_SECONDS: "90"
-      CORS_ALLOWED_ORIGINS: "http://localhost:5173"
+      CORS_ALLOWED_ORIGINS: "*"
       JWT_SECRET: "demo-secret-change-in-production"
+      STATION_KEY: "demo-station-key"
     ports:
       - "8080:8080"
     healthcheck:
@@ -87,6 +88,7 @@ services:
     environment:
       STATION_ID: station-1
       MQTT_BROKER: tcp://mosquitto:1883
+      STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "22"
       FAULT_PROBABILITY: "0.005"
     depends_on:
@@ -106,6 +108,7 @@ services:
     environment:
       STATION_ID: station-2
       MQTT_BROKER: tcp://mosquitto:1883
+      STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "50"
       FAULT_PROBABILITY: "0.01"
     depends_on:
@@ -125,6 +128,7 @@ services:
     environment:
       STATION_ID: station-3
       MQTT_BROKER: tcp://mosquitto:1883
+      STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "75"
       FAULT_PROBABILITY: "0.008"
     depends_on:
@@ -144,6 +148,7 @@ services:
     environment:
       STATION_ID: station-4
       MQTT_BROKER: tcp://mosquitto:1883
+      STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "150"
       FAULT_PROBABILITY: "0.015"
     depends_on:
@@ -163,6 +168,7 @@ services:
     environment:
       STATION_ID: station-5
       MQTT_BROKER: tcp://mosquitto:1883
+      STATION_KEY: "demo-station-key"
       MAX_POWER_KW: "300"
       FAULT_PROBABILITY: "0.02"
       AUTO_CYCLE: "true"

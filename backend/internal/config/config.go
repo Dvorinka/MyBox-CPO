@@ -22,6 +22,7 @@ type Config struct {
 	OfflineAfter       time.Duration
 	CORSAllowedOrigins []string
 	JWTSecret          string
+	StationKey         string
 }
 
 func Load() Config {
@@ -42,8 +43,9 @@ func Load() Config {
 		PeakStartHour:      envInt("PEAK_START_HOUR", 7),
 		PeakEndHour:        envInt("PEAK_END_HOUR", 21),
 		OfflineAfter:       time.Duration(envInt("OFFLINE_AFTER_SECONDS", 90)) * time.Second,
-		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS", "http://localhost:5173"),
+		CORSAllowedOrigins: envList("CORS_ALLOWED_ORIGINS", "*"),
 		JWTSecret:          secret,
+		StationKey:         env("STATION_KEY", ""),
 	}
 }
 

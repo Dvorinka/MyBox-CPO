@@ -24,8 +24,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.JWTSecret != "test-secret" {
 		t.Fatalf("JWTSecret = %s, want test-secret", cfg.JWTSecret)
 	}
-	if len(cfg.CORSAllowedOrigins) != 1 || cfg.CORSAllowedOrigins[0] != "http://localhost:5173" {
-		t.Fatalf("CORSAllowedOrigins = %v, want [http://localhost:5173]", cfg.CORSAllowedOrigins)
+	if len(cfg.CORSAllowedOrigins) != 1 || cfg.CORSAllowedOrigins[0] != "*" {
+		t.Fatalf("CORSAllowedOrigins = %v, want [*]", cfg.CORSAllowedOrigins)
 	}
 }
 

@@ -69,8 +69,10 @@ npm test
 
 ### Slabiny frontendu — opraveno
 - ✅ **Frontend testy** — přidáno 12 testů (`api.test.ts`, `login-form.test.tsx`, `use-stations.test.tsx`)
-- ✅ **Security drobnosti** — odstraněn wildcard CORS, JWT_SECRET vyžadován, přidán globální 401/403 handling s auto-logoutem
+- ✅ **Security drobnosti** — JWT_SECRET vyžadován (panic pokud chybí), globální 401/403 handling s auto-logoutem, CORS konfigurovatelné přes env
 - ✅ **Menší duplicity v kódu** — extrahován `useChartTheme()` hook, sloučen `useIsDark` s `useTheme`, odstraněny zbytečné ternární operátory
+- ✅ **OpenAPI spec** — přidán `openapi.yaml` s popisy všech endpointů
+- ✅ **Lepší identity stanic** — `STATION_KEY` pro validaci MQTT zpráv ze stanic
 
 ---
 
@@ -87,13 +89,15 @@ npm test
 
 ## Environment Variables
 
-| Proměnná        | Popis                          |
-| --------------- | ------------------------------ |
-| DATABASE_URL    | Připojovací řetězec k Postgres |
-| MQTT_BROKER     | Adresa MQTT brokeru            |
-| JWT_SECRET      | Tajný klíč pro JWT tokeny      |
-| PRICE_PER_KWH   | Cena za kWh                    |
-| AUTO_CYCLE      | Automatický cyklus simulátoru  |
+| Proměnná           | Popis                          |
+| ------------------ | ------------------------------ |
+| DATABASE_URL       | Připojovací řetězec k Postgres |
+| MQTT_BROKER        | Adresa MQTT brokeru            |
+| JWT_SECRET         | Tajný klíč pro JWT tokeny      |
+| CORS_ALLOWED_ORIGINS | CORS origins (default: *)    |
+| STATION_KEY        | API key pro validaci stanic    |
+| PRICE_PER_KWH      | Cena za kWh                    |
+| AUTO_CYCLE         | Automatický cyklus simulátoru  |
 
 ---
 

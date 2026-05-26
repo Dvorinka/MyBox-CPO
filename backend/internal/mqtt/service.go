@@ -32,6 +32,7 @@ type Service struct {
 
 type stationMessage struct {
 	StationID     string    `json:"station_id"`
+	StationKey    string    `json:"station_key,omitempty"`
 	Timestamp     time.Time `json:"timestamp"`
 	Status        string    `json:"status,omitempty"`
 	TransactionID string    `json:"transaction_id,omitempty"`
@@ -56,7 +57,7 @@ type commandAck struct {
 }
 
 func NewService(cfg config.Config, store *db.Store, hub *realtime.Hub, logger *zap.Logger) *Service {
-	return &Service{cfg: cfg, store: store, hub: hub, pricer: pricing.NewService(cfg), logger: logger}
+	return &Service{cfg: cfg, store: store, hub: hub, pricer: pricing.NewService(cfg, store), logger: logger}
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -185,6 +186,10 @@ func (s *Service) handleMessage(_ paho.Client, message paho.Message) {
 	var payload stationMessage
 	if err := json.Unmarshal(message.Payload(), &payload); err != nil {
 		s.logger.Warn("mqtt payload invalid", zap.String("topic", message.Topic()), zap.Error(err))
+		return
+	}
+	if s.cfg.StationKey != "" && payload.StationKey != s.cfg.StationKey {
+		s.logger.Warn("mqtt station key mismatch", zap.String("station_id", stationID), zap.String("topic", message.Topic()))
 		return
 	}
 	if payload.StationID == "" {

@@ -25,6 +25,7 @@ type Config struct {
 	MaxPowerKW       float64
 	FaultProbability float64
 	AutoCycle        bool
+	StationKey       string
 }
 
 type Station struct {
@@ -39,6 +40,7 @@ type Station struct {
 
 type telemetry struct {
 	StationID     string    `json:"station_id"`
+	StationKey    string    `json:"station_key,omitempty"`
 	Timestamp     time.Time `json:"timestamp"`
 	Status        string    `json:"status,omitempty"`
 	TransactionID string    `json:"transaction_id,omitempty"`
@@ -95,6 +97,7 @@ func loadConfig() Config {
 		MaxPowerKW:       envFloat("MAX_POWER_KW", 22),
 		FaultProbability: envFloat("FAULT_PROBABILITY", 0.01),
 		AutoCycle:        envBool("AUTO_CYCLE", false),
+		StationKey:       env("STATION_KEY", ""),
 	}
 }
 
@@ -318,6 +321,7 @@ func (s *Station) tickCharging() {
 
 	s.publish("meter", telemetry{
 		StationID:     s.cfg.StationID,
+		StationKey:    s.cfg.StationKey,
 		Timestamp:     now,
 		TransactionID: txID,
 		PowerKW:       power,
@@ -338,6 +342,7 @@ func (s *Station) publishHeartbeat() {
 	s.mu.Lock()
 	payload := telemetry{
 		StationID:  s.cfg.StationID,
+		StationKey: s.cfg.StationKey,
 		Timestamp:  time.Now().UTC(),
 		Status:     s.status,
 		MaxPowerKW: s.cfg.MaxPowerKW,
@@ -359,6 +364,7 @@ func (s *Station) publishStatus() {
 func (s *Station) publishStatusWith(status, transactionID string, meterWh int64) {
 	s.publish("status", telemetry{
 		StationID:     s.cfg.StationID,
+		StationKey:    s.cfg.StationKey,
 		Timestamp:     time.Now().UTC(),
 		Status:        status,
 		TransactionID: transactionID,

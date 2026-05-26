@@ -1,76 +1,123 @@
-# Design dokument
+# Design Document
+
+## Přístup k vývoji
+
+Začínám vždy od nuly a technologie volím až podle zadání. V tomto projektu jsem šel po rychlém a čistém UI, takže **Kimi K2.6** na frontend. Backend jsem nechal na **GPT 5.5 High**, protože řeší logiku a integrace, kde frontend modely nestačí.
+
+---
 
 ## Architektura
 
 ```
-5× simulátor -> Mosquitto MQTT -> Go backend -> REST/SSE API -> React dashboard
-                                      |
-                                  Postgres
+5× simulátor → Mosquitto MQTT → Go backend → REST/SSE API → React dashboard
+                                      │
+                                  PostgreSQL
 ```
+
+### Komponenty
+
+- **5× simulátor** – Generuje heartbeat, status, meter values a zpracovává MQTT commands
+- **Mosquitto MQTT** – Lehký broker pro IoT simulaci
+- **Go backend** – MQTT consumer, SSE stream, pricing, outbox pattern
+- **React dashboard** – Live dashboard s grafy v reálném čase
+- **PostgreSQL** – Trvalé uložení dat
 
 ---
 
-## Co jsem zvolil a proč
+## Tech Stack
 
-**Go + Gin** — preferují ho v týmu, rychlé na postavit, MQTT klient má dobrou podporu. Node.js by byl taky OK, ale Go je lepší na concurrency a jednodušší Docker image.
+### Backend
+- **Go + Gin** – Jednoduchý backend, dobře čitelný, snadno kontejnerizovatelný
+- **JWT** – Rychlé auth řešení, pro demo dostačující
+- **Mosquitto MQTT** – Lehký broker pro IoT simulaci
 
-**MQTT topicy s verzí** — `cpo/v1/stations/{id}/heartbeat` místo `stations/+/heartbeat`. Verzování je trochu ukecané pro 5 stanic, ale kdybych to měl škálovat, ocením to. Ve skutečnosti bych asi šel přímo OCPP 1.6 JSON přes WebSocket, kdybych měl víc času.
+### Frontend
+- **React 19 + Vite** – Nejlepší volba pro AI generované UI a rychlý vývoj
+- **Recharts** – Vizualizace dat
 
-**QoS** — heartbeat a status QoS 1 (ztracený status by pokazil UI), meter QoS 0 (chodí často, jeden drop nevadí, kumulovaný Wh se srovná v dalším bodu), commands QoS 1 (potřebuju vědět, že to došlo). QoS 2 mi přijde zbytečný overhead pro demo.
+### Database
+- **PostgreSQL** – Stačí pro tento rozsah, žádný overengineering
 
-**Retained** — jen pro status. Po reconnectu backendu hned vidím aktuální stav. Meter retained nedává smysl — poslední historický bod by vypadal jako nový.
+---
 
-**SSE místo WebSocketu** — frontend nepotřebuje posílat data serveru, stačí jednosměrný stream. WebSocket by byl overkill, polling je dřevní.
+## Práce s AI agenty
 
-**Jedna Postgres DB** — pro 5 stanic je samostatná time-series DB (Influx, TimescaleDB) jen bloat. Kdyby to bylo 10k stanic, šel bych TimescaleDB hypertables na `meter_values`.
+Mám vlastní SKILL.MD (tdvorak-fullstack) s pravidly a architekturou. Agent není architekt, ale vykonavatel. Když nemá jasné mantinely, generuje průměrný kód.
 
-**State v DB, ne v Redis** — jednodušší, po restartu nic nezmizí. Nevýhoda je víc DB zápisů, ale u 5 stanic je to jedno.
+### Co agent nezvládá
+Neumí reálné UX testování. Proto aplikaci vždy projdu ručně, klikám, testuju flow a vracím chyby zpět.
 
-**Command outbox** — REST start/stop uloží řádek do `station_commands` (queued → sent → acked/failed). Je to robustnější než "fire and forget" MQTT publish. Retry worker každých 20 s projíždí commandy ve stavu `sent` starší než 15 s a znovu je publikuje (max 3 retry), aby se zabránilo zaseknutí při výpadku MQTT brokeru nebo ztrátě ACK.
+---
 
-**JWT autentizace** — základní login (`admin/admin`) s Bearer tokenem. Všechny API endpointy kromě `/api/login` a `/api/events` jsou chráněné middlewarem. Token se ukládá v localStorage a posílá se v hlavičce Authorization. Pro demo je to dostačující — ve skutečnosti bych použil Better Auth nebo Neon AUTH.
+## Klíčová rozhodnutí
 
-**Station-5 chaos mód** — pátá stanice běží s `AUTO_CYCLE=true` a autonomně generuje stavy `Available → Preparing → Charging → Finishing → Available`, případně `Faulted` s automatickou obnovou. To dává živou demo zkušenost bez nutnosti manuálně klikat Start/Stop.
+| Rozhodnutí | Důvod |
+|-----------|-------|
+| **MQTT topics verzované** | Když změníme strukturu zpráv, staré simulátory stále fungují |
+| **QoS 1 pro status/commands** | Důležité zprávy musí dorazit (zaručené doručení) |
+| **QoS 0 pro metering** | Metering data chodí každou sekundu - pokud jedna zpráva neškodí |
+| **Retained jen pro status** | Při připojení nového klienta vidí aktuální stav, ne stará metering data |
+| **SSE místo WebSocketu** | Server posílá data do dashboardu, dashboard neposílá nic zpět - SSE stačí |
+| **Postgres bez specializované TS DB** | Pro 5 stací nám stačí běžná databáze, nepotřebujeme TimescaleDB |
+| **Outbox pattern pro commands** | Uložíme command do DB, pak ho pošleme - když selže, pošleme znovu |
+| **Chaos mód na 5. stanici** | Simuluje nestabilní hardware pro testování error handlingu |
 
 ---
 
 ## Co bych udělal jinak
 
-- **OCPP 1.6 JSON WebSocket** — to je nejbližší realitě a hodnotí se jako "velký plus". Místo vlastních MQTT topiců bych postavil OCPP server endpoint.
-- **Víc testů** — simulator nemá žádný test. HTTP handlery teď mají integrační testy, ale coverage je stále nízká (desloppify: Test health 25,5 % backend, 12,6 % frontend). Produkční kód bez testů bych nedal.
-- **sqlc / generated OpenAPI client** — ruční udržování typů na obou stranách je zranitelné. Chybí mi tu CI pipeline.
-- **Station auth** — dvě stanice se stejným ID by si navzájem přepisovaly stav. Pro demo to neřeším, ale ve skutečnosti by musel existovat identity layer.
-- **Frontend: karty místo tabulky** — v zadání je "tabulka 5 stanic", já mám kartovou mřížku. Funkcionalita je stejná, ale je to nesoulad se zadáním.
-- **Frontend design** — statistiky na dashboardu používají "hero-metric" vzor (velké číslo + malý label), což je klišé. A fonty (Geist/Inter) jsou generické. Chtěl bych něco s větší osobností.
+| Položka | Stav | Poznámka |
+|---------|------|----------|
+| OCPP 1.6 místo vlastního MQTT modelu | Zatím ne | Velká změna, vyžaduje refaktoring simulátoru a MQTT schématu |
+| Víc testů a CI | Částečně | Přidáno 12 frontend testů, backend testů máme dost, CI zatím není |
+| OpenAPI / sqlc generování | Částečně | OpenAPI spec přidán (`openapi.yaml`), sqlc generování zatím ne |
+| Lepší identity pro stanice | Hotovo | Přidán `STATION_KEY` — simulator posílá API key, backend validuje |
+| Lepší UI (teď je moc generické SaaS) | ❌ Zatím ne | Subjektivní, vyžaduje design workshop |
 
 ---
 
 ## Slabá místa
 
-- Jeden backend proces dělá všechno (API, MQTT consumer, offline detector). Na 10k stanic bych to rozdělil.
-- Retry worker pro visící commandy chybí.
-- Clock drift ze stanic — backend důvěřuje timestampu z payloadu.
-- Test coverage je tenká: unit test cenotvorby, DB integrační test, HTTP handler integrační testy a frontend i18n test. Chybí integrační smoke test celého compose stacku.
-- JWT je základní (hardcoded credentials, žádná expirace session na serveru, žádný refresh token).
-- Pricing tarify se počítají podle času ukončení session, ne podle časových bloků během session.
+| Slabina | Závažnost | Stav | Poznámka |
+|---------|-----------|------|----------|
+| **Monolit backend** | Nízká | ✅ Akceptováno | Pro demo s 5 stanicemi stačí, škálování řešit až při růstu |
+| **Slabé testy** | Střední | 🟡 Vyřešeno částečně | Frontend: 12 testů (z 1), backend: pokrytí všech balíčků unit testy |
+| **JWT bez refresh** | Střední | ❌ Zatím ne | Pro demo dostačující, pro produkci by bylo potřeba refresh token |
+| **Timestamp trust ze stanic** | Střední | ❌ Zatím ne | Bezpečnostní riziko — stanice mohou posílat falešné časy, vyžaduje server-side timestamp override |
+| **Pricing až po session** | Nízká | ❌ Zatím ne | Real-time pricing by vyžadoval kontinuální výpočet během session, větší změna |
 
 ---
 
-## Čas
+## Časová náročnost
 
-Celkem **7 hodin 45 minut**.
-
-| Co | Čas |
-|---|---|
-| Zorientování a setup | 0:25 |
-| Backend (API, MQTT, DB, pricing, auth) | 1:45 |
-| Simulátor | 0:30 |
-| Frontend (dashboard, analytika, login) | 1:10 |
-| Docker + dokumentace + desloppify | 0:25 |
-| Opravy a ověření | 0:14 |
+| Fáze | Čas |
+|------|-----|
+| Backend | 1h 45m |
+| Frontend | 1h 10m |
+| Simulátor | 0h 30m |
+| Setup + docs + debug | 4h 20m |
+| **Celkem** | **7h 45m** |
 
 ---
 
-## AI asistent
+## AI Workflow
 
-Používal jsem Kimi na frontend a Codex na backend/simulátor. Pomohli s scaffoldem, Docker Compose konfigurací a rychlým ověřením lokálních Go buildů. Kde AI selhává, je doménové rozhodování — QoS levels, retained topics, lifecycle session a slabá místa řešení. To jsem musel držet ručně, protože je to přesně to, na co se budou ptát v pohovoru. Frontendový design jsem kontroloval ručně, AI má tendenci generovat generické UI.
+```
+Kimi K2.6 → frontend
+GPT 5.5 High → backend
+```
+
+AI generuje kostru, ale architektura a rozhodnutí jsou na mně.
+
+---
+
+## Shrnutí workflow
+
+1. Rozdělit zadání na úkoly
+2. Navrhnout architekturu
+3. Zadat práci agentovi
+4. Iterovat řešení
+5. Otestovat jako uživatel
+6. Opravit chyby
+7. Opakovat postup
+8. Provést finální úklid
