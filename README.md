@@ -73,6 +73,9 @@ npm test
 - ✅ **Menší duplicity v kódu** — extrahován `useChartTheme()` hook, sloučen `useIsDark` s `useTheme`, odstraněny zbytečné ternární operátory
 - ✅ **OpenAPI spec** — přidán `openapi.yaml` s popisy všech endpointů
 - ✅ **Lepší identity stanic** — `STATION_KEY` pro validaci MQTT zpráv ze stanic
+- ✅ **Timestamp trust** — server-side timestamp override s drift tolerance 30s
+- ✅ **Real-time pricing** — průběžný výpočet ceny během session v `handleMeter`
+- ✅ **JWT refresh token** — access (1h) + refresh (7d) v httpOnly cookie, `/api/refresh` endpoint
 
 ---
 

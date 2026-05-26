@@ -1,21 +1,40 @@
 package pricing
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"mybox-cpo/backend/internal/config"
 )
 
+type mockStore struct {
+	settings Settings
+}
+
+func (m *mockStore) GetPricingSettings(ctx context.Context) (Settings, error) {
+	return m.settings, nil
+}
+
 func TestQuote(t *testing.T) {
-	service := NewService(config.Config{
+	cfg := config.Config{
 		PeakPricePerKWh:    10,
 		OffPeakPricePerKWh: 6,
 		DCPowerThresholdKW: 50,
 		DCPriceMultiplier:  1.2,
 		PeakStartHour:      7,
 		PeakEndHour:        21,
-	})
+	}
+	store := &mockStore{
+		settings: Settings{
+			PeakPricePerKWh:    10,
+			OffPeakPricePerKWh: 6,
+			PeakStartHour:      7,
+			PeakEndHour:        21,
+			DCMultiplier:       1.2,
+		},
+	}
+	service := NewService(cfg, store)
 
 	tests := []struct {
 		name       string

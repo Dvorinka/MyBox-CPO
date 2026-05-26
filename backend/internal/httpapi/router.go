@@ -12,6 +12,7 @@ import (
 	"mybox-cpo/backend/internal/db"
 	"mybox-cpo/backend/internal/metrics"
 	mqttsvc "mybox-cpo/backend/internal/mqtt"
+	"mybox-cpo/backend/internal/pricing"
 	"mybox-cpo/backend/internal/realtime"
 
 	"github.com/gin-contrib/cors"
@@ -42,33 +43,59 @@ func NewRouter(cfg config.Config, store *db.Store, mqtt *mqttsvc.Service, hub *r
 		AllowMethods:     []string{http.MethodGet, http.MethodPost, http.MethodOptions},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
 
 	router.GET("/health", api.health)
 	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
-	// Public API routes (no auth required for SSE and login)
+	// Public API routes (no auth required for SSE, login, refresh)
 	public := router.Group("/api")
 	public.POST("/login", api.login(authService))
+	public.POST("/refresh", api.refresh(authService))
+	public.POST("/logout", api.logout)
 	public.GET("/events", api.events)
 
 	// Protected API routes
 	protected := router.Group("/api")
 	protected.Use(authService.Middleware())
+	protected.GET("/me", api.me)
 	protected.GET("/stations", api.listStations)
 	protected.GET("/stations/:id", api.getStation)
 	protected.GET("/stations/:id/sessions", api.listSessions)
 	protected.GET("/stations/:id/meter-values", api.listMeterValues)
 	protected.POST("/stations/:id/start", api.startCharging)
 	protected.POST("/stations/:id/stop", api.stopCharging)
+	protected.GET("/pricing", api.getPricing)
+	protected.PUT("/pricing", api.setPricing)
 
 	return router
 }
 
 func (a *API) health(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "time": time.Now().UTC()})
+}
+
+func (a *API) me(c *gin.Context) {
+	claims, ok := c.Get("authClaims")
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+	c.JSON(http.StatusOK, claims)
+}
+
+func setTokenCookies(c *gin.Context, accessToken, refreshToken string) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access_token", accessToken, 3600, "/", "", false, true)
+	c.SetCookie("refresh_token", refreshToken, 7*24*3600, "/api/refresh", "", false, true)
+}
+
+func clearTokenCookies(c *gin.Context) {
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access_token", "", -1, "/", "", false, true)
+	c.SetCookie("refresh_token", "", -1, "/api/refresh", "", false, true)
 }
 
 func (a *API) login(authService auth.Service) gin.HandlerFunc {
@@ -86,13 +113,42 @@ func (a *API) login(authService auth.Service) gin.HandlerFunc {
 			a.fail(c, http.StatusUnauthorized, "invalid credentials", nil)
 			return
 		}
-		token, err := authService.Generate(req.Username)
+		accessToken, refreshToken, err := authService.GeneratePair(req.Username)
 		if err != nil {
 			a.fail(c, http.StatusInternalServerError, "token generation failed", err)
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{"token": token, "type": "Bearer"})
+		setTokenCookies(c, accessToken, refreshToken)
+		c.JSON(http.StatusOK, gin.H{"type": "Bearer"})
 	}
+}
+
+func (a *API) refresh(authService auth.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		refreshToken, err := c.Cookie("refresh_token")
+		if err != nil || refreshToken == "" {
+			a.fail(c, http.StatusUnauthorized, "missing refresh token", nil)
+			return
+		}
+		claims, err := authService.ParseRefresh(refreshToken)
+		if err != nil {
+			clearTokenCookies(c)
+			a.fail(c, http.StatusUnauthorized, "invalid refresh token", err)
+			return
+		}
+		accessToken, newRefresh, err := authService.GeneratePair(claims.UserID)
+		if err != nil {
+			a.fail(c, http.StatusInternalServerError, "token generation failed", err)
+			return
+		}
+		setTokenCookies(c, accessToken, newRefresh)
+		c.JSON(http.StatusOK, gin.H{"type": "Bearer"})
+	}
+}
+
+func (a *API) logout(c *gin.Context) {
+	clearTokenCookies(c)
+	c.JSON(http.StatusOK, gin.H{"status": "logged out"})
 }
 
 func (a *API) listStations(c *gin.Context) {
@@ -215,6 +271,36 @@ func (a *API) events(c *gin.Context) {
 			flusher.Flush()
 		}
 	}
+}
+
+func (a *API) getPricing(c *gin.Context) {
+	settings, err := a.store.GetPricingSettings(c.Request.Context())
+	if err != nil {
+		a.fail(c, http.StatusInternalServerError, "pricing settings read failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, settings)
+}
+
+func (a *API) setPricing(c *gin.Context) {
+	var req pricing.Settings
+	if err := c.ShouldBindJSON(&req); err != nil {
+		a.fail(c, http.StatusBadRequest, "invalid pricing settings body", err)
+		return
+	}
+	if req.PeakStartHour < 0 || req.PeakStartHour > 23 || req.PeakEndHour < 0 || req.PeakEndHour > 23 {
+		a.fail(c, http.StatusBadRequest, "peak hours must be 0-23", nil)
+		return
+	}
+	if req.PeakPricePerKWh < 0 || req.OffPeakPricePerKWh < 0 || req.DCMultiplier < 0 {
+		a.fail(c, http.StatusBadRequest, "prices and multiplier must be non-negative", nil)
+		return
+	}
+	if err := a.store.SetPricingSettings(c.Request.Context(), req); err != nil {
+		a.fail(c, http.StatusInternalServerError, "pricing settings write failed", err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"status": "updated"})
 }
 
 func (a *API) fail(c *gin.Context, status int, message string, err error) {

@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-background: #ffffff;
   --color-foreground: #0f172a;
@@ -35,6 +37,13 @@
   --color-chart-4: #64748b;
   --color-chart-5: #94a3b8;
 
+  --color-tesla-carbon: #171a20;
+  --color-tesla-graphite: #393c41;
+  --color-tesla-pewter: #5c5e62;
+  --color-tesla-silver: #8e8e8e;
+  --color-tesla-cloud: #eeeeee;
+  --color-tesla-pale: #d0d1d2;
+
   --radius-sm: 0.25rem;
   --radius-md: 0.375rem;
   --radius-lg: 0.5rem;
@@ -42,6 +51,42 @@
 
   --font-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+.dark {
+  --color-background: #171a20;
+  --color-foreground: #ffffff;
+
+  --color-card: #1e2128;
+  --color-card-foreground: #ffffff;
+
+  --color-popover: #1e2128;
+  --color-popover-foreground: #ffffff;
+
+  --color-primary: #3b82f6;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #2a2d35;
+  --color-secondary-foreground: #ffffff;
+
+  --color-muted: #2a2d35;
+  --color-muted-foreground: #8e8e8e;
+
+  --color-accent: #2596be;
+  --color-accent-foreground: #ffffff;
+
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+
+  --color-border: #2a2d35;
+  --color-input: #2a2d35;
+  --color-ring: #3b82f6;
+
+  --color-chart-1: #3b82f6;
+  --color-chart-2: #2596be;
+  --color-chart-3: #38bdf8;
+  --color-chart-4: #8e8e8e;
+  --color-chart-5: #5c5e62;
 }
 
 @layer base {

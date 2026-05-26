@@ -1,7 +1,6 @@
 import type { Station, ChargingSession, MeterValue, StartResponse, StopResponse } from "@/types"
 
 const API_BASE = "/api"
-const TOKEN_KEY = "mybox_token"
 
 export interface PricingSettings {
   peak_price_per_kwh: number
@@ -12,19 +11,22 @@ export interface PricingSettings {
   updated_at: string
 }
 
-function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem(TOKEN_KEY)
-  if (token) {
-    return { Authorization: `Bearer ${token}` }
+async function refreshToken(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/refresh`, { method: "POST", credentials: "include" })
+    return res.ok
+  } catch {
+    return false
   }
-  return {}
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    if (res.status === 401 || res.status === 403) {
-      localStorage.removeItem(TOKEN_KEY)
-      window.dispatchEvent(new Event("mybox:auth:expired"))
+    if (res.status === 401) {
+      const refreshed = await refreshToken()
+      if (!refreshed) {
+        window.dispatchEvent(new Event("mybox:auth:expired"))
+      }
     }
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `HTTP ${res.status}`)
@@ -34,56 +36,63 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  login: async (username: string, password: string): Promise<{ token: string; type: string }> => {
+  login: async (username: string, password: string): Promise<{ type: string }> => {
     const res = await fetch(`${API_BASE}/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ username, password }),
     })
-    const data = await handleResponse<{ token: string; type: string }>(res)
-    localStorage.setItem(TOKEN_KEY, data.token)
-    return data
+    return handleResponse<{ type: string }>(res)
   },
 
-  logout: () => {
-    localStorage.removeItem(TOKEN_KEY)
+  logout: async () => {
+    await fetch(`${API_BASE}/logout`, { method: "POST", credentials: "include" }).catch(() => {})
   },
 
-  isAuthenticated: () => !!localStorage.getItem(TOKEN_KEY),
+  isAuthenticated: async (): Promise<boolean> => {
+    try {
+      const res = await fetch(`${API_BASE}/me`, { credentials: "include" })
+      return res.ok
+    } catch {
+      return false
+    }
+  },
 
   getStations: (): Promise<Station[]> =>
-    fetch(`${API_BASE}/stations`, { headers: getAuthHeaders() }).then((r) => handleResponse<Station[]>(r)),
+    fetch(`${API_BASE}/stations`, { credentials: "include" }).then((r) => handleResponse<Station[]>(r)),
 
   getStation: (id: string): Promise<Station> =>
-    fetch(`${API_BASE}/stations/${id}`, { headers: getAuthHeaders() }).then((r) => handleResponse<Station>(r)),
+    fetch(`${API_BASE}/stations/${id}`, { credentials: "include" }).then((r) => handleResponse<Station>(r)),
 
   getSessions: (id: string, limit = 100): Promise<ChargingSession[]> =>
-    fetch(`${API_BASE}/stations/${id}/sessions?limit=${limit}`, { headers: getAuthHeaders() }).then((r) =>
+    fetch(`${API_BASE}/stations/${id}/sessions?limit=${limit}`, { credentials: "include" }).then((r) =>
       handleResponse<ChargingSession[]>(r)
     ),
 
   getMeterValues: (id: string, minutes = 30, limit = 1000): Promise<MeterValue[]> =>
-    fetch(`${API_BASE}/stations/${id}/meter-values?minutes=${minutes}&limit=${limit}`, { headers: getAuthHeaders() }).then(
+    fetch(`${API_BASE}/stations/${id}/meter-values?minutes=${minutes}&limit=${limit}`, { credentials: "include" }).then(
       (r) => handleResponse<MeterValue[]>(r)
     ),
 
   startCharging: (id: string): Promise<StartResponse> =>
-    fetch(`${API_BASE}/stations/${id}/start`, { method: "POST", headers: getAuthHeaders() }).then((r) =>
+    fetch(`${API_BASE}/stations/${id}/start`, { method: "POST", credentials: "include" }).then((r) =>
       handleResponse<StartResponse>(r)
     ),
 
   stopCharging: (id: string): Promise<StopResponse> =>
-    fetch(`${API_BASE}/stations/${id}/stop`, { method: "POST", headers: getAuthHeaders() }).then((r) =>
+    fetch(`${API_BASE}/stations/${id}/stop`, { method: "POST", credentials: "include" }).then((r) =>
       handleResponse<StopResponse>(r)
     ),
 
   getPricing: (): Promise<PricingSettings> =>
-    fetch(`${API_BASE}/pricing`, { headers: getAuthHeaders() }).then((r) => handleResponse<PricingSettings>(r)),
+    fetch(`${API_BASE}/pricing`, { credentials: "include" }).then((r) => handleResponse<PricingSettings>(r)),
 
   setPricing: (settings: Omit<PricingSettings, "updated_at">): Promise<{ status: string }> =>
     fetch(`${API_BASE}/pricing`, {
       method: "PUT",
-      headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify(settings),
     }).then((r) => handleResponse<{ status: string }>(r)),
 }

@@ -215,6 +215,18 @@ func (s *Store) StopSession(ctx context.Context, stationID string, transactionID
 	return err
 }
 
+func (s *Store) UpdateSessionRunningCost(ctx context.Context, stationID, transactionID string, meterWh int64, cost float64) error {
+	defer metrics.ObserveDBWrite("update_running_cost", time.Now())
+	_, err := s.pool.Exec(ctx, `
+		UPDATE charging_sessions
+		SET total_kwh = GREATEST(($3 - start_meter_wh)::double precision / 1000.0, 0),
+			total_cost = $4,
+			updated_at = now()
+		WHERE station_id = $1 AND transaction_id = $2 AND end_time IS NULL
+	`, stationID, transactionID, meterWh, cost)
+	return err
+}
+
 func (s *Store) InsertMeterValue(ctx context.Context, value MeterValue) (Station, error) {
 	defer metrics.ObserveDBWrite("insert_meter", time.Now())
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
@@ -305,6 +317,19 @@ func (s *Store) ListSessions(ctx context.Context, stationID string, limit int) (
 		sessions = append(sessions, session)
 	}
 	return sessions, rows.Err()
+}
+
+func (s *Store) GetOpenSession(ctx context.Context, stationID string) (ChargingSession, error) {
+	var session ChargingSession
+	row := s.pool.QueryRow(ctx, `
+		SELECT id::text, transaction_id, station_id, start_time, end_time, start_meter_wh, end_meter_wh, total_kwh, total_cost, price_per_kwh, pricing_tariff, station_power_class
+		FROM charging_sessions
+		WHERE station_id = $1 AND end_time IS NULL
+		ORDER BY start_time DESC
+		LIMIT 1
+	`, stationID)
+	err := row.Scan(&session.ID, &session.TransactionID, &session.StationID, &session.StartTime, &session.EndTime, &session.StartMeterWh, &session.EndMeterWh, &session.TotalKWh, &session.TotalCost, &session.PricePerKWh, &session.PricingTariff, &session.PowerClass)
+	return session, err
 }
 
 func (s *Store) CreateCommand(ctx context.Context, stationID, command string, transactionID *string) (StationCommand, error) {
@@ -469,6 +494,32 @@ func (s *Store) BumpCommandRetry(ctx context.Context, commandID string) (Station
 		RETURNING id::text, station_id, command, transaction_id, status, error_message, queued_at, sent_at, acked_at, retry_count, updated_at
 	`, commandID)
 	return scanCommand(row)
+}
+
+func (s *Store) GetPricingSettings(ctx context.Context) (pricing.Settings, error) {
+	var settings pricing.Settings
+	err := s.pool.QueryRow(ctx, `
+		SELECT peak_price_per_kwh, offpeak_price_per_kwh, peak_start_hour, peak_end_hour, dc_multiplier, updated_at
+		FROM pricing_settings
+		WHERE id = 1
+	`).Scan(&settings.PeakPricePerKWh, &settings.OffPeakPricePerKWh, &settings.PeakStartHour, &settings.PeakEndHour, &settings.DCMultiplier, &settings.UpdatedAt)
+	return settings, err
+}
+
+func (s *Store) SetPricingSettings(ctx context.Context, settings pricing.Settings) error {
+	defer metrics.ObserveDBWrite("set_pricing_settings", time.Now())
+	_, err := s.pool.Exec(ctx, `
+		INSERT INTO pricing_settings (id, peak_price_per_kwh, offpeak_price_per_kwh, peak_start_hour, peak_end_hour, dc_multiplier, updated_at)
+		VALUES (1, $1, $2, $3, $4, $5, now())
+		ON CONFLICT (id) DO UPDATE SET
+			peak_price_per_kwh = EXCLUDED.peak_price_per_kwh,
+			offpeak_price_per_kwh = EXCLUDED.offpeak_price_per_kwh,
+			peak_start_hour = EXCLUDED.peak_start_hour,
+			peak_end_hour = EXCLUDED.peak_end_hour,
+			dc_multiplier = EXCLUDED.dc_multiplier,
+			updated_at = EXCLUDED.updated_at
+	`, settings.PeakPricePerKWh, settings.OffPeakPricePerKWh, settings.PeakStartHour, settings.PeakEndHour, settings.DCMultiplier)
+	return err
 }
 
 func scanCommand(row pgx.Row) (StationCommand, error) {

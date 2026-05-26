@@ -152,7 +152,7 @@ export function MarkerTooltip({ children }: { children: React.ReactNode }) {
 
 export function MarkerPopup({ children }: { children: React.ReactNode }) {
   return (
-    <div className="absolute left-1/2 top-full z-20 mt-1 hidden -translate-x-1/2 rounded-lg border bg-white p-2 shadow-lg group-hover:block">
+    <div className="absolute left-1/2 top-full z-20 mt-1 hidden -translate-x-1/2 rounded-lg border border-border bg-background p-2 text-foreground shadow-lg group-hover:block">
       {children}
     </div>
   )

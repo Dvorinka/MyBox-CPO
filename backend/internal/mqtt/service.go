@@ -195,9 +195,17 @@ func (s *Service) handleMessage(_ paho.Client, message paho.Message) {
 	if payload.StationID == "" {
 		payload.StationID = stationID
 	}
-	if payload.Timestamp.IsZero() {
-		payload.Timestamp = time.Now().UTC()
+	serverTime := time.Now().UTC()
+	if !payload.Timestamp.IsZero() {
+		drift := payload.Timestamp.Sub(serverTime)
+		if drift < 0 {
+			drift = -drift
+		}
+		if drift > 30*time.Second {
+			s.logger.Warn("mqtt timestamp drift detected", zap.String("station_id", stationID), zap.Duration("drift", drift))
+		}
 	}
+	payload.Timestamp = serverTime
 	metrics.MQTTMessagesTotal.WithLabelValues(kind).Inc()
 
 	switch kind {
@@ -314,6 +322,15 @@ func (s *Service) handleMeter(ctx context.Context, stationID string, payload sta
 	if err != nil {
 		s.logger.Error("meter insert failed", zap.String("station_id", stationID), zap.Error(err))
 		return
+	}
+	if payload.TransactionID != "" {
+		session, err := s.store.GetOpenSession(ctx, stationID)
+		if err == nil && session.TransactionID == payload.TransactionID {
+			cost := s.pricer.RunningCost(session.StartMeterWh, payload.MeterWh, s.maxPowerKW(ctx, stationID, payload.MaxPowerKW), session.StartTime)
+			if err := s.store.UpdateSessionRunningCost(ctx, stationID, payload.TransactionID, payload.MeterWh, cost); err != nil {
+				s.logger.Error("running cost update failed", zap.String("station_id", stationID), zap.Error(err))
+			}
+		}
 	}
 	s.hub.Broadcast("meter_value", value)
 	s.hub.Broadcast("station_update", station)

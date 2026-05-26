@@ -22,7 +22,7 @@ interface RevenueDetailProps {
 
 export default function RevenueDetail({ sessions, stations, open, onOpenChange }: RevenueDetailProps) {
   const { t } = useI18n()
-  const { gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
+  const { isDark, gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
 
   const stats = useMemo(() => {
     const stationStats = new Map<string, { peakRev: number; offPeakRev: number; sessions: number; energy: number }>()

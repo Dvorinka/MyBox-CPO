@@ -28,7 +28,7 @@ interface AnalyticsProps {
 
 export default function Analytics({ sessions, stations }: AnalyticsProps) {
   const { t } = useI18n()
-  const { gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
+  const { isDark, gridStroke, tickFill, tooltipStyle, primary, accent, destructive } = useChartTheme()
 
   // Top 3 stations by total energy delivered
   const topStations = useMemo(() => {

@@ -96,7 +96,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-[#102472]">
+          <h1 className="text-3xl font-semibold tracking-tight text-primary">
             {t("fleetOverview")}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -110,7 +110,7 @@ export default function Dashboard() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-[#102472]/20 bg-[#102472]/5 px-4 py-3 text-sm text-[#102472]">
+        <div className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-primary dark:border-primary/30 dark:bg-primary/10">
           {t("apiConnectionIssue", { error })}
         </div>
       )}
@@ -118,23 +118,23 @@ export default function Dashboard() {
       {/* Stats Bar */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard
-          icon={<Activity className="h-4 w-4 text-[#2596be]" />}
+          icon={<Activity className="h-4 w-4 text-accent" />}
           label={t("chargingNow")}
           value={stats.charging}
           sub={t("ofStations", { count: stats.total })}
         />
         <StatCard
-          icon={<Power className="h-4 w-4 text-[#2596be]" />}
+          icon={<Power className="h-4 w-4 text-accent" />}
           label={t("totalPower")}
           value={`${stats.totalPower.toFixed(1)} kW`}
         />
         <StatCard
-          icon={<BatteryCharging className="h-4 w-4 text-[#2596be]" />}
+          icon={<BatteryCharging className="h-4 w-4 text-accent" />}
           label={t("totalEnergy")}
           value={`${(stats.totalEnergy / 1000).toFixed(1)} kWh`}
         />
         <StatCard
-          icon={<Zap className="h-4 w-4 text-[#2596be]" />}
+          icon={<Zap className="h-4 w-4 text-accent" />}
           label={t("available")}
           value={stats.available}
           sub={stats.faulted > 0 ? `${stats.faulted} ${t("faulted")}` : undefined}
@@ -209,12 +209,12 @@ export default function Dashboard() {
                     <button
                       onClick={() => openDetail(station)}
                       className={cn(
-                        "size-5 rounded-full border-2 border-white shadow-lg transition-transform hover:scale-110",
+                        "size-5 rounded-full border-2 border-background shadow-lg transition-transform hover:scale-110",
                         station.status === "Faulted"
                           ? "bg-red-500"
                           : station.status === "Charging"
-                          ? "bg-[#102472]"
-                          : "bg-[#2596be]"
+                          ? "bg-primary"
+                          : "bg-accent"
                       )}
                     />
                   </MarkerContent>
@@ -307,14 +307,14 @@ function StationCard({
   // All card icons are blue-only; status color is shown via badge + dot only
   const iconBg =
     station.status === "Charging"
-      ? "bg-[#102472]"
+      ? "bg-primary"
       : station.status === "Faulted"
-      ? "bg-[#102472]/70"
-      : "bg-[#2596be]"
+      ? "bg-primary/70"
+      : "bg-accent"
 
   const borderClass =
     station.status === "Charging"
-      ? "border-[#102472] ring-1 ring-[#102472]/20"
+      ? "border-primary ring-1 ring-primary/20"
       : station.status === "Faulted"
       ? "border-red-400 ring-1 ring-red-400/20"
       : "border"
@@ -322,7 +322,7 @@ function StationCard({
   return (
     <Card
       className={cn(
-        "group cursor-pointer transition-all duration-300 hover:border-[#2596be]/30 hover:bg-slate-50/50",
+        "group cursor-pointer transition-all duration-300 hover:border-accent/30 hover:bg-muted/30",
         borderClass
       )}
       onClick={onClick}
@@ -330,7 +330,7 @@ function StationCard({
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
-            <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${iconBg}`}>
+            <div className={cn("flex h-9 w-9 items-center justify-center rounded-lg", iconBg)}>
               <Zap className="h-4 w-4 text-white" />
             </div>
             <div>
@@ -342,9 +342,11 @@ function StationCard({
           </div>
           <div className="flex items-center gap-1.5">
             <span
-              className={`h-2 w-2 rounded-full ${statusDotColor(station.status)} ${
-                station.status === "Charging" ? "animate-pulse" : ""
-              }`}
+              className={cn(
+                "h-2 w-2 rounded-full",
+                statusDotColor(station.status),
+                station.status === "Charging" && "animate-pulse"
+              )}
             />
             <Badge variant={statusVariant(station.status)} className="text-[10px]">
               {t(`status${station.status}` as Parameters<typeof t>[0])}
@@ -377,7 +379,7 @@ function StationCard({
         <div className="mt-4 flex gap-2">
           <Button
             size="sm"
-            className="h-7 flex-1 bg-[#102472] text-[10px] font-medium hover:bg-[#102472]/90"
+            className="h-7 flex-1 text-[10px] font-medium"
             disabled={!canStart || actionLoading !== null}
             onClick={(e) => {
               e.stopPropagation()
@@ -411,7 +413,7 @@ function StationCard({
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 gap-1 text-xs text-[#2596be] hover:text-[#102472]"
+            className="h-7 gap-1 text-xs text-accent hover:text-primary"
             onClick={(e) => {
               e.stopPropagation()
               onClick()

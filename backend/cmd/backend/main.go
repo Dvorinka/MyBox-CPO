@@ -101,7 +101,7 @@ func connectDB(ctx context.Context, databaseURL string, logger *zap.Logger) (*pg
 func runOfflineDetector(ctx context.Context, cfg config.Config, store *db.Store, hub *realtime.Hub, logger *zap.Logger) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-	pricer := pricing.NewService(cfg)
+	pricer := pricing.NewService(cfg, store)
 
 	for {
 		select {

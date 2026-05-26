@@ -5,9 +5,9 @@ import LoginForm from "./login-form"
 
 vi.mock("@/lib/api", () => ({
   api: {
-    login: vi.fn().mockResolvedValue({ token: "test", type: "Bearer" }),
+    login: vi.fn().mockResolvedValue({ type: "Bearer" }),
     logout: vi.fn(),
-    isAuthenticated: vi.fn().mockReturnValue(false),
+    isAuthenticated: vi.fn().mockResolvedValue(false),
   },
 }))
 

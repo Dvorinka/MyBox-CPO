@@ -72,7 +72,7 @@ Neumí reálné UX testování. Proto aplikaci vždy projdu ručně, klikám, te
 | Víc testů a CI | Částečně | Přidáno 12 frontend testů, backend testů máme dost, CI zatím není |
 | OpenAPI / sqlc generování | Částečně | OpenAPI spec přidán (`openapi.yaml`), sqlc generování zatím ne |
 | Lepší identity pro stanice | Hotovo | Přidán `STATION_KEY` — simulator posílá API key, backend validuje |
-| Lepší UI (teď je moc generické SaaS) | ❌ Zatím ne | Subjektivní, vyžaduje design workshop |
+| Lepší UI (teď je moc generické SaaS) | Zatím ne | Subjektivní, vyžaduje design workshop |
 
 ---
 
@@ -80,11 +80,11 @@ Neumí reálné UX testování. Proto aplikaci vždy projdu ručně, klikám, te
 
 | Slabina | Závažnost | Stav | Poznámka |
 |---------|-----------|------|----------|
-| **Monolit backend** | Nízká | ✅ Akceptováno | Pro demo s 5 stanicemi stačí, škálování řešit až při růstu |
-| **Slabé testy** | Střední | 🟡 Vyřešeno částečně | Frontend: 12 testů (z 1), backend: pokrytí všech balíčků unit testy |
-| **JWT bez refresh** | Střední | ❌ Zatím ne | Pro demo dostačující, pro produkci by bylo potřeba refresh token |
-| **Timestamp trust ze stanic** | Střední | ❌ Zatím ne | Bezpečnostní riziko — stanice mohou posílat falešné časy, vyžaduje server-side timestamp override |
-| **Pricing až po session** | Nízká | ❌ Zatím ne | Real-time pricing by vyžadoval kontinuální výpočet během session, větší změna |
+| **Monolit backend** | Nízká | Akceptováno | Pro demo s 5 stanicemi stačí, škálování řešit až při růstu |
+| **Slabé testy** | Střední | Vyřešeno částečně | Frontend: 12 testů (z 1), backend: pokrytí všech balíčků unit testy |
+| **JWT bez refresh** | Střední | Hotovo | Access token (1h) + refresh token (7d) v httpOnly cookie, `/api/refresh` endpoint |
+| **Timestamp trust ze stanic** | Střední | Hotovo | Server-side timestamp override s drift tolerance 30s, mismatch logován |
+| **Pricing až po session** | Nízká | Hotovo | `RunningCost` počítá průběžnou cenu v `handleMeter` a ukládá do DB |
 
 ---
 

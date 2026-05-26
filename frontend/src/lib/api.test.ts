@@ -3,7 +3,6 @@ import { api } from "./api"
 
 describe("api", () => {
   beforeEach(() => {
-    localStorage.clear()
     vi.stubGlobal("fetch", vi.fn())
   })
 
@@ -11,31 +10,48 @@ describe("api", () => {
     vi.unstubAllGlobals()
   })
 
-  it("stores token on login", async () => {
+  it("calls login with credentials", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: async () => ({ token: "test-token", type: "Bearer" }),
+      json: async () => ({ type: "Bearer" }),
     })
     vi.stubGlobal("fetch", mockFetch)
 
     const result = await api.login("admin", "admin")
-    expect(result.token).toBe("test-token")
-    expect(localStorage.getItem("mybox_token")).toBe("test-token")
+    expect(result.type).toBe("Bearer")
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/login",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+      })
+    )
   })
 
-  it("removes token on logout", () => {
-    localStorage.setItem("mybox_token", "test-token")
-    api.logout()
-    expect(localStorage.getItem("mybox_token")).toBeNull()
+  it("calls logout with credentials", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal("fetch", mockFetch)
+
+    await api.logout()
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/logout",
+      expect.objectContaining({ credentials: "include" })
+    )
   })
 
-  it("isAuthenticated returns true when token exists", () => {
-    localStorage.setItem("mybox_token", "test-token")
-    expect(api.isAuthenticated()).toBe(true)
+  it("isAuthenticated returns true when /api/me is ok", async () => {
+    const mockFetch = vi.fn().mockResolvedValue({ ok: true })
+    vi.stubGlobal("fetch", mockFetch)
+
+    const result = await api.isAuthenticated()
+    expect(result).toBe(true)
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/api/me",
+      expect.objectContaining({ credentials: "include" })
+    )
   })
 
-  it("sends Authorization header for protected endpoints", async () => {
-    localStorage.setItem("mybox_token", "test-token")
+  it("sends credentials for protected endpoints", async () => {
     const mockFetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => [{ id: "station-1" }],
@@ -45,28 +61,28 @@ describe("api", () => {
     await api.getStations()
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/stations",
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: "Bearer test-token",
-        }),
-      })
+      expect.objectContaining({ credentials: "include" })
     )
   })
 
-  it("clears token and dispatches event on 401", async () => {
-    localStorage.setItem("mybox_token", "test-token")
-    const mockFetch = vi.fn().mockResolvedValue({
-      ok: false,
-      status: 401,
-      json: async () => ({ error: "unauthorized" }),
-    })
+  it("dispatches auth:expired on 401 when refresh fails", async () => {
+    const mockFetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: "unauthorized" }),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: "invalid refresh" }),
+      })
     vi.stubGlobal("fetch", mockFetch)
 
     const eventSpy = vi.fn()
     window.addEventListener("mybox:auth:expired", eventSpy)
 
     await expect(api.getStations()).rejects.toThrow()
-    expect(localStorage.getItem("mybox_token")).toBeNull()
     expect(eventSpy).toHaveBeenCalled()
 
     window.removeEventListener("mybox:auth:expired", eventSpy)
